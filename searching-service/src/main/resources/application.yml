@@ -1,0 +1,15 @@
+server:
+  port: 8081
+spring:
+  cloud:
+    nacos:
+      server-addr: 129.69.209.197:30008
+      discovery:
+        cluster-name: Stuttgart # 集群名称
+  application:
+    name: searching-service  #服务名称
+  datasource:
+    url: jdbc:mysql://localhost:3306/cloud_order?useSSL=false
+    username: root
+    password: 123456
+    driver-class-name: com.mysql.jdbc.Driver

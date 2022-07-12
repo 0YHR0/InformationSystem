@@ -1,0 +1,3 @@
+# Project exclude paths
+/searching-service/target/
+/user-service/target/
