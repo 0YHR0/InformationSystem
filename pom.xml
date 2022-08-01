@@ -11,6 +11,9 @@
         <module>user-service</module>
         <module>searching-service</module>
         <module>feign-api</module>
+        <module>postgresql-service</module>
+        <module>solr-service</module>
+        <module>doc-service</module>
     </modules>
 
     <properties>

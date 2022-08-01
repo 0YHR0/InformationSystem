@@ -7,9 +7,12 @@
         <sourceOutputDir name="target/generated-sources/annotations" />
         <sourceTestOutputDir name="target/generated-test-sources/test-annotations" />
         <outputRelativeToContentRoot value="true" />
-        <module name="searching-service" />
-        <module name="feign-api" />
+        <module name="postgresql-service" />
         <module name="user-service" />
+        <module name="searching-service" />
+        <module name="doc-service" />
+        <module name="feign-api" />
+        <module name="solr-service" />
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
@@ -18,8 +21,11 @@
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="doc-service" options="-parameters" />
       <module name="feign-api" options="-parameters" />
+      <module name="postgresql-service" options="-parameters" />
       <module name="searching-service" options="-parameters" />
+      <module name="solr-service" options="-parameters" />
       <module name="user-service" options="-parameters" />
       <module name="userservice" options="-parameters" />
     </option>
