@@ -1,2 +1,2 @@
 # InformationSystem
-SpringCloud template
+Lab
