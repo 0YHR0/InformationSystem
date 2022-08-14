@@ -16,14 +16,18 @@
       </profile>
     </annotationProcessing>
     <bytecodeTargetLevel>
+      <module name="database-service" target="1.8" />
+      <module name="searchEngine-service" target="1.8" />
       <module name="userservice" target="1.8" />
     </bytecodeTargetLevel>
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="database-service" options="-parameters" />
       <module name="doc-service" options="-parameters" />
       <module name="feign-api" options="-parameters" />
       <module name="postgresql-service" options="-parameters" />
+      <module name="searchEngine-service" options="-parameters" />
       <module name="searching-service" options="-parameters" />
       <module name="solr-service" options="-parameters" />
       <module name="user-service" options="-parameters" />

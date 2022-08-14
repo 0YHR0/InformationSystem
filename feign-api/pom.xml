@@ -21,6 +21,12 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-openfeign</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.yang</groupId>
+            <artifactId>user-service</artifactId>
+            <version>1.0</version>
+            <scope>compile</scope>
+        </dependency>
 <!--        <dependency>-->
 <!--            <groupId>cn.itcast.demo</groupId>-->
 <!--            <artifactId>feign-api</artifactId>-->

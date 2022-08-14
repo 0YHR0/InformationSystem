@@ -13,3 +13,5 @@ spring:
     username: root
     password: 123456
     driver-class-name: com.mysql.jdbc.Driver
+nfs:
+  filepath: D:\test\
