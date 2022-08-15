@@ -11,3 +11,5 @@ spring:
   data:
     solr:
       host: http://129.69.209.197:30002/solr/testcore
+nfs:
+  filepath: D:\test\

@@ -1,16 +1,21 @@
 package com.yang.web;
 
+import com.yang.pojo.Doc;
+import com.yang.servcie.DocService;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
 import org.apache.solr.client.solrj.response.QueryResponse;
 import org.apache.solr.client.solrj.response.UpdateResponse;
 import org.apache.solr.common.SolrInputDocument;
+import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * get the request which related to operate the solr cloud
@@ -22,7 +27,7 @@ import java.io.IOException;
 public class SolrController {
 
     @Autowired
-    private SolrClient solrClient;
+    private DocService docService;
 
     @GetMapping("/test/{id}")
     public String test(@PathVariable("id") String id){
@@ -31,35 +36,21 @@ public class SolrController {
     }
 
     /**
-     * Get the article by name
-     * @param name
+     * Get the article by keywords
+     * @param keywords
      * @return
      */
-    @GetMapping("/query/{name}")
-    public String querySolr(@PathVariable("name") String name){
-        SolrQuery query =  new SolrQuery("name:" + name);
-        System.out.println("-------------------------------------------query--------------------------------");
-        QueryResponse response = new QueryResponse();
-        try {
-            response = solrClient.query(query);
-        } catch (SolrServerException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        return response.toString();
+    @GetMapping("/query/{keywords}")
+    public List<Doc> querySolr(@PathVariable("keywords") String keywords){
+       return docService.querySolr(keywords);
     }
 
     /**
      * indexing the file
      * @return solrdocID
      */
-    @GetMapping("/index/{path}")
-    public String indexing(@PathVariable("path") String path) throws SolrServerException, IOException {
-        SolrInputDocument doc = new SolrInputDocument();
-        UpdateResponse updateResponse = solrClient.add("techproducts", doc);
-        return "0";
-
+    @GetMapping("/index/{objectId}")
+    public String indexing(@PathVariable("objectId") String objectId) throws SolrServerException, IOException {
+        return docService.indexing(objectId);
     }
 }
