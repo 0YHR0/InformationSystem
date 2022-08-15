@@ -57,8 +57,8 @@ public class DocService {
      * indexing the file
      * @return solrdocID
      */
-    public String indexing(String objectId) throws SolrServerException, IOException {
-        String path = filePath + objectId;
+    public String indexing(String path, String objectId) throws SolrServerException, IOException {
+        String completePath = path + objectId;
         /**
          * Todo...
          */

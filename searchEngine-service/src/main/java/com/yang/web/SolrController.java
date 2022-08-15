@@ -49,8 +49,8 @@ public class SolrController {
      * indexing the file
      * @return solrdocID
      */
-    @GetMapping("/index/{objectId}")
-    public String indexing(@PathVariable("objectId") String objectId) throws SolrServerException, IOException {
-        return docService.indexing(objectId);
+    @GetMapping("/index/{path}/{objectId}")
+    public String indexing(@PathVariable("objectId") String objectId, @PathVariable("path") String path) throws SolrServerException, IOException {
+        return docService.indexing(path, objectId);
     }
 }

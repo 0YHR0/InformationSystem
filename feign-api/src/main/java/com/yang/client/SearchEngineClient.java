@@ -15,8 +15,8 @@ import java.util.List;
 @FeignClient("searchEngine-service")
 public interface SearchEngineClient {
 
-    @GetMapping("/index/{path}")
-    String indexing(@PathVariable("path") String path);
+    @GetMapping("/index/{path}/{objectId}")
+    String indexing(@PathVariable("path") String path, @PathVariable("objectId") String objectId);
 
     @GetMapping("/query/{keywords}")
     List<Doc> querySolr(@PathVariable("keywords") String keywords);
