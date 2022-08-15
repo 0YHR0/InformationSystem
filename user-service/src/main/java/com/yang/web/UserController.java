@@ -68,7 +68,7 @@ public class UserController {
          */
 
         String solrDocId = "xxx";
-        searchEngineClient.indexing(objectId);
+        searchEngineClient.indexing(filePath, objectId);
 
         /**
          * update solr doc ID
