@@ -3,10 +3,13 @@ package com.yang.service;
 import com.yang.mapper.AuthorMapper;
 import com.yang.mapper.MetadataMapper;
 import com.yang.pojo.Author;
+import com.yang.pojo.Doc;
 import com.yang.pojo.Metadata;
 import org.apache.ibatis.annotations.Param;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 /**
  * @author YHR
@@ -21,5 +24,9 @@ public class MetadataService {
 
     public int createDoc(Metadata metadata, String path, String objectId){
         return  metadataMapper.createDoc(metadata, path, objectId);
+    }
+
+    public List<Doc> queryDocByMetadata(Metadata metadata){
+        return metadataMapper.queryDocByMetadata(metadata);
     }
 }

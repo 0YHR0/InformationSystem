@@ -1,9 +1,13 @@
 package com.yang.client;
 
+import com.yang.pojo.Doc;
 import com.yang.pojo.Metadata;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestParam;
+
+import java.util.List;
 
 /**
  * call the database service
@@ -19,5 +23,8 @@ public interface DatabaseClient {
 
     @GetMapping("/postgresql/updateSolrDocId/{docId}/{solrDocId}")
     int updateSolrDocId(@PathVariable("docId") int docId, @PathVariable("solrDocId") String solrDocId);
+
+    @GetMapping("/query")
+    List<Doc> queryDocByMetadata(@RequestParam("metadata") Metadata metadata);
 
 }

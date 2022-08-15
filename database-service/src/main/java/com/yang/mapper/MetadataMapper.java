@@ -1,10 +1,14 @@
 package com.yang.mapper;
 
 import com.yang.pojo.Author;
+import com.yang.pojo.Doc;
 import com.yang.pojo.Metadata;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+
+import java.util.List;
+
 /**
  * This is a mapper for operating metadata of the doc
  * @Author: Yang Haoran
@@ -20,4 +24,13 @@ public interface MetadataMapper {
      */
     @Insert("xxxx #{metadata} #{path} #{objectId}")
     int createDoc(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
+
+    /**
+     * Todo...
+     * queryDocByMetadata
+     * @param metadata
+     * @return
+     */
+    @Select("xxxx #{metadata}")
+    List<Doc> queryDocByMetadata(@Param("metadata") Metadata metadata);
 }

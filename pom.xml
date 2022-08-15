@@ -9,11 +9,9 @@
     <version>1.0</version>
     <modules>
         <module>user-service</module>
-        <module>searching-service</module>
         <module>feign-api</module>
         <module>database-service</module>
         <module>searchEngine-service</module>
-        <module>doc-service</module>
     </modules>
 
     <properties>
@@ -55,7 +53,7 @@
             <dependency>
                 <groupId>org.mybatis.spring.boot</groupId>
                 <artifactId>mybatis-spring-boot-starter</artifactId>
-                <version>${mybatis.version}</version>
+                <version>3.4.3</version>
             </dependency>
             <dependency>
                 <groupId>com.alibaba.cloud</groupId>

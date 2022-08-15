@@ -1,18 +1,17 @@
 package com.yang.web;
 
 import com.yang.pojo.Author;
+import com.yang.pojo.Doc;
 import com.yang.pojo.Metadata;
 import com.yang.service.AuthorService;
 import com.yang.service.MetadataService;
 import com.yang.service.SolrIdService;
 import io.swagger.annotations.ApiParam;
-import org.apache.ibatis.annotations.Param;
-import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+
 /**
  * get the request which related to operate the postgresql
  * @Author: Yang Haoran
@@ -68,6 +67,17 @@ public class PostgresqlController {
     public int updateSolrDocId(@PathVariable("docId") int docId, @PathVariable("solrDocId") String solrDocId){
         System.out.println("update: docId" + docId + "solrdocId" + solrDocId);
         return solrIdService.UpdateSolrDocId(docId, solrDocId);
+    }
+
+    /**
+     * queryDocByMetadata
+     * @param metadata
+     * @return
+     */
+    @GetMapping("/query")
+    public List<Doc> queryDocByMetadata(@RequestParam("metadata") Metadata metadata){
+        System.out.println("query by metadata: " + metadata);
+        return metadataService.queryDocByMetadata(metadata);
     }
 
 }
