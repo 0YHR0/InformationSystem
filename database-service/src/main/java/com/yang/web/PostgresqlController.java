@@ -41,7 +41,7 @@ public class PostgresqlController {
      */
     @GetMapping("/author/{name}")
     public Author getAuthorByName(@ApiParam("The name of the author") @PathVariable("name") String name){
-        System.out.println("get author by name:" + name);
+        System.out.println("get author by name:" + name +"from Yuxin");
         return authorService.queryByName(name);
 
     }

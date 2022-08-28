@@ -10,6 +10,7 @@
         <module name="database-service" />
         <module name="user-service" />
         <module name="feign-api" />
+        <module name="solr-service" />
         <module name="searchingEngine-service" />
       </profile>
     </annotationProcessing>
@@ -28,6 +29,7 @@
       <module name="searchEngine-service" options="-parameters" />
       <module name="searching-service" options="-parameters" />
       <module name="searchingEngine-service" options="-parameters" />
+      <module name="solr-service" options="-parameters" />
       <module name="user-service" options="-parameters" />
       <module name="userservice" options="-parameters" />
     </option>

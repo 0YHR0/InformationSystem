@@ -3,7 +3,6 @@
   <component name="Encoding">
     <file url="file://$PROJECT_DIR$/database-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/feign-api/src/main/java" charset="UTF-8" />
-    <file url="file://$PROJECT_DIR$/feign-api/src/main/resources" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/searchEngine-service/src/main/java" charset="UTF-8" />
     <file url="file://$PROJECT_DIR$/user-service/src/main/java" charset="UTF-8" />
   </component>
