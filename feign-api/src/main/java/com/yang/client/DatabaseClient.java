@@ -3,9 +3,7 @@ package com.yang.client;
 import com.yang.pojo.Doc;
 import com.yang.pojo.Metadata;
 import org.springframework.cloud.openfeign.FeignClient;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -18,13 +16,13 @@ import java.util.List;
 @FeignClient("database-service")
 public interface DatabaseClient {
 
-    @GetMapping("/postgresql/createDoc/{metadata}/{path}/{ObjectId}")
-    int createDocToDB(@PathVariable("metadata") Metadata matadata, @PathVariable("path") String path, @PathVariable("ObjectId")String ObjectId);
+    @GetMapping("/postgresql/createDoc")
+    int createDocToDB(@RequestParam("metadata") Metadata metadata, @RequestParam("path") String path, @RequestParam("objectId") String objectId);
 
-    @GetMapping("/postgresql/updateSolrDocId/{docId}/{solrDocId}")
-    int updateSolrDocId(@PathVariable("docId") int docId, @PathVariable("solrDocId") String solrDocId);
+    @PutMapping("/postgresql/updateSolrDocId")
+    int updateSolrDocId(@RequestParam("docId") int docId, @RequestParam("solrDocId") String solrDocId);
 
-    @GetMapping("/query")
-    List<Doc> queryDocByMetadata(@RequestParam("metadata") Metadata metadata);
+    @PostMapping("/query")
+    List<Doc> queryDocByMetadata(@RequestBody Metadata metadata);
 
 }

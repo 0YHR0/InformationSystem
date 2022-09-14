@@ -1,0 +1,37 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dbservice
+  namespace: dev
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      run: dbservice
+  template:
+    metadata:
+      labels:
+        run: dbservice
+    spec:
+      containers:
+        - image: 0yhr0/informationsystem:1.0.0
+          name: dbservice
+          ports:
+            - containerPort: 8088
+              protocol: TCP
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: dbservice
+  namespace: dev
+spec:
+  selector:
+    run: dbservice
+  type: NodePort
+  sessionAffinity: ClientIP
+  ports: # 端口信息
+    - protocol: TCP
+      port: 8088  # service端口
+      targetPort: 8088 # pod端口
+      nodePort: 31000 # 主机端口

@@ -14,9 +14,10 @@ import java.util.List;
 
 /**
  * get the request which related to operate the postgresql
- * @Author: Yang Haoran
+ * @Author: Liu Yuxin, Yang Haoran
  * @Date: 01-08-2022 11:28:50
  */
+@CrossOrigin
 @RestController
 @RequestMapping("postgresql")
 public class PostgresqlController {
@@ -51,8 +52,8 @@ public class PostgresqlController {
      * @param metadata
      * @return docid
      */
-    @GetMapping("/createDoc/{metadata}/{path}/{objectId}")
-    public int createDoc(@PathVariable("metadata") Metadata metadata, @PathVariable("path") String path, @PathVariable("objectId") String objectId){
+    @PostMapping("/createDoc")
+    public int createDoc(@RequestParam("metadata") Metadata metadata, @RequestParam("path") String path, @RequestParam("objectId") String objectId){
         System.out.println("create: metadata " + metadata + "path: " + path + "objectId: " + objectId);
         return metadataService.createDoc(metadata, path, objectId);
     }
@@ -63,8 +64,8 @@ public class PostgresqlController {
      * @param solrDocId
      * @return
      */
-    @GetMapping("/updateSolrDocId/{docId}/{solrDocId}")
-    public int updateSolrDocId(@PathVariable("docId") int docId, @PathVariable("solrDocId") String solrDocId){
+    @PutMapping("/updateSolrDocId")
+    public int updateSolrDocId(@RequestParam("docId") int docId, @RequestParam("solrDocId") String solrDocId){
         System.out.println("update: docId" + docId + "solrdocId" + solrDocId);
         return solrIdService.UpdateSolrDocId(docId, solrDocId);
     }
@@ -74,8 +75,8 @@ public class PostgresqlController {
      * @param metadata
      * @return
      */
-    @GetMapping("/query")
-    public List<Doc> queryDocByMetadata(@RequestParam("metadata") Metadata metadata){
+    @PostMapping("/query")
+    public List<Doc> queryDocByMetadata(@RequestBody Metadata metadata){
         System.out.println("query by metadata: " + metadata);
         return metadataService.queryDocByMetadata(metadata);
     }
