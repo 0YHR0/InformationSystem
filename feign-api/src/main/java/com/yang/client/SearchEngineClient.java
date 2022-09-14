@@ -4,6 +4,8 @@ import com.yang.pojo.Doc;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
 
@@ -15,8 +17,8 @@ import java.util.List;
 @FeignClient("searchEngine-service")
 public interface SearchEngineClient {
 
-    @GetMapping("/index/{path}/{objectId}")
-    String indexing(@PathVariable("path") String path, @PathVariable("objectId") String objectId);
+    @PostMapping("/index")
+    String indexing(@RequestParam("path") String path, @RequestParam("objectId") String objectId);
 
     @GetMapping("/query/{keywords}")
     List<Doc> querySolr(@PathVariable("keywords") String keywords);

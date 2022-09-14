@@ -11,7 +11,7 @@ import java.util.List;
 
 /**
  * This is a mapper for operating metadata of the doc
- * @Author: Yang Haoran
+ * @Author: Liu Yuxin, Yang Haoran
  * @Date: 01-08-2022 11:27:23
  */
 public interface MetadataMapper {

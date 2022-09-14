@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 import java.io.Serializable;
 /**
  * The pojo class for the author of the doc
- * @Author: Yang Haoran
+ * @Author: Liu Yuxin, Yang Haoran
  * @Date: 01-08-2022 11:27:47
  */
 @Data

@@ -23,6 +23,7 @@ import java.util.UUID;
  * @Author: Yang Haoran
  * @Date: 01-08-2022 11:30:21
  */
+@CrossOrigin
 @RestController
 @RequestMapping("user")
 public class UserController {
@@ -54,7 +55,7 @@ public class UserController {
      * @return
      */
     @PostMapping("/create")
-    public String createDoc(@RequestParam("file") MultipartFile file, @RequestParam("metadata") Metadata metadata){
+    public String createDoc(@RequestBody MultipartFile file, @RequestParam("metadata") Metadata metadata){
         String objectId = userService.storeDoc(file);
 
         /**

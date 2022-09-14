@@ -6,7 +6,7 @@ import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
 /**
- * @author YHR
+ * @author Liu Yuxin, Yang Haoran
  * @date 2022/8/14 56:21:42
  * @description
  */
