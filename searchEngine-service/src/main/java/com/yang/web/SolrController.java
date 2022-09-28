@@ -19,10 +19,9 @@ import java.util.List;
 
 /**
  * get the request which related to operate the solr cloud
- * @Author: Soheb, Yang Haoran
+ * @Author: Yang Haoran
  * @Date: 01-08-2022 11:29:50
  */
-@CrossOrigin
 @RestController
 @RequestMapping("solr")
 public class SolrController {
@@ -50,8 +49,8 @@ public class SolrController {
      * indexing the file
      * @return solrdocID
      */
-    @PostMapping("/index")
-    public String indexing(@RequestParam("objectId") String objectId, @RequestParam("path") String path) throws SolrServerException, IOException {
+    @GetMapping("/index/{path}/{objectId}")
+    public String indexing(@PathVariable("objectId") String objectId, @PathVariable("path") String path) throws SolrServerException, IOException {
         return docService.indexing(path, objectId);
     }
 }
