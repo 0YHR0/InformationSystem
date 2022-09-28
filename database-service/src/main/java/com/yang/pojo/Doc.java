@@ -6,7 +6,7 @@ import lombok.NoArgsConstructor;
 
 /**
  * The return Type of the query
- * @author Liu Yuxin, Yang Haoran
+ * @author YHR
  * @date 2022/8/15 42:11:34
  * @description
  */

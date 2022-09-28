@@ -6,7 +6,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 /**
  * The service operating the author of the doc
- * @Author: Liu Yuxin, Yang Haoran
+ * @Author: Yang Haoran
  * @Date: 01-08-2022 11:28:26
  */
 @Service
