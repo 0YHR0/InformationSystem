@@ -54,7 +54,7 @@ public class UserController {
      * @return
      */
     @PostMapping("/create")
-    public String createDoc(@RequestParam("file") MultipartFile file, @RequestBody Metadata metadata){
+    public String createDoc(@RequestParam("file") MultipartFile file, @ModelAttribute Metadata metadata){
         String objectId = userService.storeDoc(file);
         return "111";
 
@@ -63,7 +63,7 @@ public class UserController {
 //         */
 //        System.out.println("metadata:" + metadata);
 //        int docId = databaseClient.createDocToDB(metadata, filePath, objectId);
-//
+
 //        /**
 //         * indexing the doc
 //         */

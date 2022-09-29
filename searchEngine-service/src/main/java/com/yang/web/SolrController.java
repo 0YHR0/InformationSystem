@@ -1,6 +1,5 @@
 package com.yang.web;
 
-import com.yang.pojo.Doc;
 import com.yang.servcie.DocService;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
@@ -11,6 +10,7 @@ import org.apache.solr.common.SolrInputDocument;
 import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import pojo.Doc;
 
 import java.io.FileInputStream;
 import java.io.IOException;
