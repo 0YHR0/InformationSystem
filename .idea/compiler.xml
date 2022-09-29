@@ -9,6 +9,7 @@
         <outputRelativeToContentRoot value="true" />
         <module name="database-service" />
         <module name="user-service" />
+        <module name="common" />
         <module name="feign-api" />
         <module name="searchingEngine-service" />
       </profile>
@@ -22,6 +23,7 @@
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="common" options="-parameters" />
       <module name="database-service" options="-parameters" />
       <module name="doc-service" options="-parameters" />
       <module name="feign-api" options="-parameters" />

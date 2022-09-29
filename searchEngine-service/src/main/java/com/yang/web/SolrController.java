@@ -19,7 +19,7 @@ import java.util.List;
 
 /**
  * get the request which related to operate the solr cloud
- * @Author: Yang Haoran
+ * @Author: Soheb, Yang Haoran
  * @Date: 01-08-2022 11:29:50
  */
 @RestController

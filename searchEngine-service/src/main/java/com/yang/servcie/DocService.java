@@ -42,7 +42,7 @@ import java.io.File;
 
 
 /**
- * @author YHR
+ * @author Soheb, Yang Haoran
  * @date 2022/8/15 00:12:02
  * @description
  */
@@ -135,7 +135,7 @@ public class DocService {
 
         //http.setRequestProperty("Content-type", "application/pdf");
 
-        String data = "C:/Users/Soheb/OneDrive/Documents/pdf-test.pdf";
+        String data = "D:/test/aaa.txt";
 
         //byte[] out = data.getBytes(StandardCharsets.UTF_8);
 

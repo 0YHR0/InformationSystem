@@ -2,12 +2,12 @@ package com.yang.service;
 
 import com.yang.mapper.AuthorMapper;
 import com.yang.mapper.MetadataMapper;
-import com.yang.pojo.Author;
-import com.yang.pojo.Doc;
-import com.yang.pojo.Metadata;
+
 import org.apache.ibatis.annotations.Param;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import pojo.Doc;
+import pojo.Metadata;
 
 import java.util.List;
 
@@ -26,7 +26,7 @@ public class MetadataService {
         return  metadataMapper.createDoc(metadata, path, objectId);
     }
 
-    public List<Doc> queryDocByMetadata(Metadata metadata){
-        return metadataMapper.queryDocByMetadata(metadata);
+    public List<Doc> queryDocByMetadata(String authorName, String date, String title){
+        return metadataMapper.queryDocByMetadata(authorName, date, title);
     }
 }

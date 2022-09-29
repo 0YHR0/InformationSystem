@@ -2,13 +2,13 @@ package com.yang.web;
 
 import com.yang.client.DatabaseClient;
 import com.yang.client.SearchEngineClient;
-import com.yang.pojo.Doc;
-import com.yang.pojo.Metadata;
 import com.yang.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import pojo.Doc;
+import pojo.Metadata;
 
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletResponse;
@@ -54,45 +54,48 @@ public class UserController {
      * @return
      */
     @PostMapping("/create")
-    public String createDoc(@RequestParam("file") MultipartFile file, @RequestParam("metadata") Metadata metadata){
+    public String createDoc(@RequestParam("file") MultipartFile file, @RequestBody Metadata metadata){
         String objectId = userService.storeDoc(file);
+        return "111";
 
-        /**
-         * create the metadata of the file to db
-         */
-        System.out.println("metadata:" + metadata);
-        int docId = databaseClient.createDocToDB(metadata, filePath, objectId);
-
-        /**
-         * indexing the doc
-         */
-
-        String solrDocId = "xxx";
-        searchEngineClient.indexing(filePath, objectId);
-
-        /**
-         * update solr doc ID
-         */
-        System.out.println("docId: " + docId + "solrdocId: " + solrDocId);
-        int status = databaseClient.updateSolrDocId(docId, solrDocId);
-
-        return "OK";
+//        /**
+//         * create the metadata of the file to db
+//         */
+//        System.out.println("metadata:" + metadata);
+//        int docId = databaseClient.createDocToDB(metadata, filePath, objectId);
+//
+//        /**
+//         * indexing the doc
+//         */
+//
+//        String solrDocId = "xxx";
+//        searchEngineClient.indexing(filePath, objectId);
+//
+//        /**
+//         * update solr doc ID
+//         */
+//        System.out.println("docId: " + docId + "solrdocId: " + solrDocId);
+//        int status = databaseClient.updateSolrDocId(docId, solrDocId);
+//
+//        return "OK";
     }
 
     /**
      * Search the doc that the user needed
-     * @param metadata
+     * @param authorname
+     * @param date
+     * @param title
      * @param keywords
      * @return
      */
     @GetMapping("/search/{keywords}")
-    public List<Doc> searchDoc(@RequestParam("metadata") Metadata metadata, @PathVariable("keywords") String keywords){
-        System.out.println("search---> metadata: " + metadata + "keywords: " + keywords);
+    public List<Doc> searchDoc(@RequestParam("authorname") String authorname, @RequestParam("date") String date, @RequestParam("title") String title, @PathVariable("keywords") String keywords){
+        System.out.println("search---> authorname: " + authorname + "date" + date + "title" + title + "keywords: " + keywords);
         List<Doc> docs = new ArrayList<>();
         /**
          * query db for metadata
          */
-        List<Doc> docFromDB = databaseClient.queryDocByMetadata(metadata);
+        List<Doc> docFromDB = databaseClient.queryDocByMetadata(authorname, date, title);
         docs.addAll(docFromDB);
         /**
          * query searching engine for keywords

@@ -1,4 +1,4 @@
-package com.yang.pojo;
+package pojo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -13,5 +13,12 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 public class Metadata {
-    private Author author;
+    private Author[] author;
+    private Organization organization;
+    private String title;
+    private String date;
+    private String filename;
+    private String fileSize;
+    private String fileType;
+
 }

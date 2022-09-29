@@ -1,9 +1,10 @@
 package com.yang.client;
 
-import com.yang.pojo.Doc;
+
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import pojo.Doc;
 
 import java.util.List;
 
