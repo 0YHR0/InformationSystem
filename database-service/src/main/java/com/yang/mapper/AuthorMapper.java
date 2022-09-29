@@ -16,7 +16,7 @@ public interface AuthorMapper {
      * @param name: the name of the author
      * @return author
      */
-    @Select("select name from author where name = #{name}")
+    @Select("select * from author where name = #{name}")
     Author findByName(@Param("name") String name);
 
 }

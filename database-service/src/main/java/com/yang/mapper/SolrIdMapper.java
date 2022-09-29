@@ -17,6 +17,6 @@ public interface SolrIdMapper {
      * @param solrDocId
      * @return
      */
-    @Update("xxxx #{docId} #{solrDocId}")
+    @Update("update objecte set solrid = #{solrDocId} where docid = #{docId} ")
     int UpdateSolrDocId(@Param("docId") int docId, @Param("solrDocId") String solrDocId);
 }

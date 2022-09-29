@@ -41,7 +41,7 @@ public class PostgresqlController {
      */
     @GetMapping("/author/{name}")
     public Author getAuthorByName(@ApiParam("The name of the author") @PathVariable("name") String name){
-        System.out.println("get author by name:" + name +"from Yuxin");
+        System.out.println("get author by name:" + name);
         return authorService.queryByName(name);
 
     }
@@ -51,10 +51,10 @@ public class PostgresqlController {
      * @param metadata
      * @return docid
      */
-    @GetMapping("/createDoc/{metadata}/{path}/{objectId}")
-    public int createDoc(@PathVariable("metadata") Metadata metadata, @PathVariable("path") String path, @PathVariable("objectId") String objectId){
-        System.out.println("create: metadata " + metadata + "path: " + path + "objectId: " + objectId);
-        return metadataService.createDoc(metadata, path, objectId);
+    @GetMapping("/createDoc/{metadata}/{docId}/{objectId}")
+    public int createDoc(@PathVariable("metadata") Metadata metadata, @PathVariable("docId") int docId, @PathVariable("objectId") int objectId){
+        System.out.println("create: metadata " + metadata + "docId:" + docId + "objectId:" + objectId);
+        return metadataService.createDoc(metadata, docId, objectId);
     }
 
     /**

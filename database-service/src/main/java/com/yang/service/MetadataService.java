@@ -20,10 +20,10 @@ import java.util.List;
 @Service
 public class MetadataService {
     @Autowired
-    private MetadataMapper metadataMapper;
+    public MetadataMapper metadataMapper;
 
-    public int createDoc(Metadata metadata, String path, String objectId){
-        return  metadataMapper.createDoc(metadata, path, objectId);
+    public int createDoc(Metadata metadata, int docId, int objectId){
+        return  metadataMapper.createDoc(metadata, docId, objectId);
     }
 
     public List<Doc> queryDocByMetadata(Metadata metadata){

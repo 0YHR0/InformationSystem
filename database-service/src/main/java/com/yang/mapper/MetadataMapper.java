@@ -22,8 +22,11 @@ public interface MetadataMapper {
      * @param metadata
      * @return docid of the doc
      */
-    @Insert("xxxx #{metadata} #{path} #{objectId}")
-    int createDoc(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
+    @Insert("insert into author(name,orgid) values(#{metadata.name},'1');\n" +
+            "insert into libraryserver (docid,deleted) values(#{docId},'false');\n"+
+            "insert into objecte (objectid, pubid, docid,nfsid) values(#{objectId},'100',#{docId},'111');\n"+
+            "insert into catalogdb (authorid, pubid, docid) select authorid, pubid, docid from objecte o, author a where a.name = #{metadata.name} and o.objectid = #{objectId}")
+    int createDoc(@Param("metadata") Metadata metadata, @Param("docId") int docid, @Param("objectId") int objectId);
 
     /**
      * Todo...
@@ -31,6 +34,8 @@ public interface MetadataMapper {
      * @param metadata
      * @return
      */
-    @Select("xxxx #{metadata}")
+    @Select("select filename, name, mntpath, objectid, o.docid, solrid from\n" +
+            "author a ,libraryserver l ,catalogdb c ,nfsserver n , objecte o\n" +
+            "where a.authorid =c.authorid and c.docid =l.docid and l.docid =o.docid and o.nfsid =n.nfsid and a.name = #{metadata.name}")
     List<Doc> queryDocByMetadata(@Param("metadata") Metadata metadata);
 }

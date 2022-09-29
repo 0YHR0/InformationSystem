@@ -12,6 +12,12 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+
+
 public class Metadata {
-    private Author author;
+    /*private Author author;*/
+    public String name;
+    /*private String type;*/
+    /*private int size;*/
+
 }
