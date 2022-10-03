@@ -120,7 +120,7 @@ public class UserService {
         try {
             Nfs3 nfs3 = new Nfs3(NFS_IP, NFS_DIR, new CredentialUnix(0, 0, null), 3);
             //创建远程服务器上Nfs文件对象
-            Nfs3File nfsFile = new Nfs3File(nfs3, path + objectId);
+            Nfs3File nfsFile = new Nfs3File(nfs3, "/"+ path + "/" + objectId);
             fileTemp = File.createTempFile(objectId.substring(0, objectId.length() - 4), objectId.substring(objectId.length() - 4));
 
 //            String localFileName = localDir + nfsFile.getName();
@@ -137,7 +137,7 @@ public class UserService {
             while (inputStream.read(buffer) != -1) {
                 outputStream.write(buffer);
             }
-            System.out.println("文件下载cache完成！");
+            System.out.println("The downloading cache complete！");
 
         } catch (IOException ex) {
             ex.printStackTrace();

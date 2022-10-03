@@ -56,28 +56,28 @@ public class UserController {
     @PostMapping("/create")
     public String createDoc(@RequestParam("file") MultipartFile file, @ModelAttribute Metadata metadata){
         String objectId = userService.storeDoc(file);
-        return "111";
+//        return "111";
 
-//        /**
-//         * create the metadata of the file to db
-//         */
-//        System.out.println("metadata:" + metadata);
-//        int docId = databaseClient.createDocToDB(metadata, filePath, objectId);
+        /**
+         * create the metadata of the file to db
+         */
+        System.out.println("metadata:" + metadata);
+        int docId = databaseClient.createDocToDB(metadata, filePath, objectId);
 
-//        /**
-//         * indexing the doc
-//         */
-//
-//        String solrDocId = "xxx";
-//        searchEngineClient.indexing(filePath, objectId);
-//
-//        /**
-//         * update solr doc ID
-//         */
-//        System.out.println("docId: " + docId + "solrdocId: " + solrDocId);
-//        int status = databaseClient.updateSolrDocId(docId, solrDocId);
-//
-//        return "OK";
+        /**
+         * indexing the doc
+         */
+
+        String solrDocId = "xxx";
+        searchEngineClient.indexing(filePath, objectId);
+
+        /**
+         * update solr doc ID
+         */
+        System.out.println("docId: " + docId + "solrdocId: " + solrDocId);
+        int status = databaseClient.updateSolrDocId(docId, solrDocId);
+
+        return "OK";
     }
 
     /**
@@ -100,8 +100,11 @@ public class UserController {
         /**
          * query searching engine for keywords
          */
-        List<Doc> docFromSE = searchEngineClient.querySolr(keywords);
-        docs.addAll(docFromSE);
+        List<String> docIdsFromSE = searchEngineClient.querySolr(keywords);
+        /**
+         * query the doc details from database using the solrdocId
+         */
+        docs.addAll(databaseClient.queryDocBySolrDocId(docIdsFromSE));
 
         return docs;
     }

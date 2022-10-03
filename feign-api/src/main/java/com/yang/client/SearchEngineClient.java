@@ -20,5 +20,5 @@ public interface SearchEngineClient {
     String indexing(@PathVariable("path") String path, @PathVariable("objectId") String objectId);
 
     @GetMapping("/query/{keywords}")
-    List<Doc> querySolr(@PathVariable("keywords") String keywords);
+    List<String> querySolr(@PathVariable("keywords") String keywords);
 }
