@@ -35,4 +35,11 @@ public interface MetadataMapper {
      */
     @Select("xxxx #{metadata}")
     List<Doc> queryDocByMetadata(@Param("authorname") String authorName, @Param("date")String date, @Param("title")String title);
+
+    /**
+     * Todo..
+     * queryDocBySolrDocId
+     */
+    @Select("xxx #{solrdocid}")
+    Doc queryDocBySolrDocId(@Param("solrdocid") String solrdocid);
 }

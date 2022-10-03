@@ -59,9 +59,9 @@ public class DocService {
     /**
      * Get the article by keywords
      * @param keywords
-     * @return a list of docs
+     * @return a list of solrdocId(ObjectId)
      */
-    public List<Doc> querySolr(String keywords){
+    public List<String> querySolr(String keywords){
         SolrQuery query =  new SolrQuery(keywords);
         System.out.println("-------------------------------------------query--------------------------------");
         QueryResponse response = new QueryResponse();
@@ -76,7 +76,7 @@ public class DocService {
         for(SolrDocument document : documents) {
             System.out.println(document);
           }
-        ArrayList<Doc> res = new ArrayList<Doc>();
+        ArrayList<String> res = new ArrayList<String>();
         //Doc e = new Doc(metadata, path, ObjectId, docId)
         return res;
     }
@@ -87,7 +87,7 @@ public class DocService {
      * @return solrdocID
      */
     public String indexing(String path, String objectId) throws SolrServerException, IOException {
-        String completePath = filePath + path + objectId;
+        String completePath = filePath + path + "\\" +  objectId;
         System.out.println(completePath);
         //ContentStreamUpdateRequest up = new ContentStreamUpdateRequest("/update/extract");
         //String tstPath = "C:/Users/Soheb/OneDrive/Desktop/tt.txt";
@@ -114,7 +114,7 @@ public class DocService {
         //UpdateResponse res = up.process(solrClient);
         //solrClient.request(up);
         //System.out.println(res);
-        String ftype = path.substring(path.length() - 4);
+        String ftype = completePath.substring(completePath.length() - 4);
         System.out.println(ftype);
         String server = "http://129.69.209.197:30002/solr/testcore/update/extract?commitWithin=1000&overwrite=true&wt=json&literal.id=" + objectId;
         URL url = new URL(server);
@@ -136,8 +136,8 @@ public class DocService {
 
         //http.setRequestProperty("Content-type", "application/pdf");
 
-        String data = "D:/test/aaa.txt";
-
+//        String data = "D:/test/aaa.txt";
+          String data = completePath;
         //byte[] out = data.getBytes(StandardCharsets.UTF_8);
 
         byte[] out;

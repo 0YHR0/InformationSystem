@@ -41,7 +41,7 @@ public class SolrController {
      * @return
      */
     @GetMapping("/query/{keywords}")
-    public List<Doc> querySolr(@PathVariable("keywords") String keywords){
+    public List<String> querySolr(@PathVariable("keywords") String keywords){
        return docService.querySolr(keywords);
     }
 
