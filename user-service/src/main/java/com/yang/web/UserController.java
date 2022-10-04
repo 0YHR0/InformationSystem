@@ -24,6 +24,7 @@ import java.util.UUID;
  * @Date: 01-08-2022 11:30:21
  */
 @RestController
+@CrossOrigin
 @RequestMapping("user")
 public class UserController {
 

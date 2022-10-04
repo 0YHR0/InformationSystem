@@ -20,6 +20,7 @@ import java.util.List;
  * @Date: 01-08-2022 11:28:50
  */
 @RestController
+@CrossOrigin
 @RequestMapping("postgresql")
 public class PostgresqlController {
 
