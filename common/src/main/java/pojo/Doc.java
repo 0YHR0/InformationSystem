@@ -16,8 +16,14 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @Getter
 public class Doc {
-    public Metadata metadata;
-    public String path;
+//    public Metadata metadata;
+    public String name;
+    public String title;
+    public String date;
+    public String filename;
+    public String size;
+    public String type;
+    public String mntpath;
     public String ObjectId;
     public int docId;
 

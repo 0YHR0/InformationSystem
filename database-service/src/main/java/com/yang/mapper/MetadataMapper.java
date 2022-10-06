@@ -37,14 +37,14 @@ public interface MetadataMapper {
      * @param title
      * @return
      */
-    @Select(" select distinct  docid, filename from author a, \"publication\" p , \"document\" d \n" +
-            "where a.pubid =p.pubid and p.pubid =d.pubid and (a.\"name\" =#{authorName} or p.title =#{title}  or p.\"date\" =#{date} )")
+    @Select("select distinct a.name, p.title, p.date, d.filename,d.size, d.type, n.mntpath, d.objectid, d.docid from author a, publication p, document d, nfsserver n\n" +
+            "where a.pubid =p.pubid and p.pubid =d.pubid and a.name =#{authorName} and p.title =#{title} and p.date=#{date} and d.nfsid= n.nfsid")
     List<Doc> queryDocByMetadata(@Param("authorName") String authorName, @Param("date")String date, @Param("title")String title);
 
     /**
      * Todo..
      * queryDocBySolrDocId
      */
-    @Select("select distinct docid, filename from document where solrid=#{solrdocid}")
+    @Select("select distinct a.name, p.title, p.date, d.filename,d.size, d.type, n.mntpath, d.objectid, d.docid from author a, publication p, document d, nfsserver n where solrid=#{solrdocid} and d.nfsid=n.nfsid and a.pubid =p.pubid and p.pubid =d.pubid")
     Doc queryDocBySolrDocId(@Param("solrdocid") String solrdocid);
 }
