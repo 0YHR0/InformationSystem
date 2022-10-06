@@ -11,5 +11,15 @@ spring:
   data:
     solr:
       host: http://129.69.209.197:30002/solr/testcore
+      command: /update/extract?commitWithin=1000&overwrite=true&wt=json
 nfs:
-  filepath: D:\test\
+  filepath: /mnt/nfs-solr
+  ip: 129.69.209.197
+filetype:
+  unknown: application/octet-stream
+  known: "{\
+         pdf: \"application/pdf\", \  
+         txt: \"text/plain\", \ 
+         doc: \"application/msword\", \
+         csv: \"text/csv\" \
+         }"

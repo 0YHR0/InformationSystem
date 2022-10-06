@@ -20,6 +20,16 @@
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.emc.ecs</groupId>
+            <artifactId>nfs-client</artifactId>
+            <version>1.0.3</version>
+        </dependency>
+        <dependency>
+            <groupId>commons-io</groupId>
+            <artifactId>commons-io</artifactId>
+            <version>2.6</version>
+        </dependency>
         <!--mybatis-->
 <!--        <dependency>-->
 <!--            <groupId>org.mybatis.spring.boot</groupId>-->
