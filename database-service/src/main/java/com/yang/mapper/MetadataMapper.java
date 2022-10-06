@@ -1,6 +1,5 @@
 package com.yang.mapper;
 
-
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
@@ -22,7 +21,12 @@ public interface MetadataMapper {
      * @param metadata
      * @return docid of the doc
      */
-    @Insert("xxxx #{metadata} #{path} #{objectId}")
+    @Insert("insert into organization(orgid,name,address) values(#{metadata.organization.orgId},#{metadata.organization.name},#{metadata.organization.address});\n"+
+            "insert into publication(pubid,orgid,title,date) values(#{metadata.pubid},#{metadata.organization.orgId},#{metadata.title},#{metadata.date});\n"+
+            "insert into author(authorid,name,pubid) values(#{metadata.author.authorid}, #{metadata.author.name}, #{metadata.pubid});\n"+
+            "insert into nfsserver(mntpath) values(#{path});\n"+
+            "insert into document(pubid,type,size,filename,objectid) values(#{metadata.pubid},#{metadata.fileType},#{metadata.fileSize},#{metadata.filename},#{objectId});\n"+
+            "update \"document\" set nfsid =(select nfsid from nfsserver where mntpath=#{path}) where objectid=#{objectId}")
     int createDoc(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
 
     /**
@@ -33,6 +37,14 @@ public interface MetadataMapper {
      * @param title
      * @return
      */
-    @Select("xxxx #{metadata}")
-    List<Doc> queryDocByMetadata(@Param("authorname") String authorName, @Param("date")String date, @Param("title")String title);
+    @Select(" select distinct  docid, filename from author a, \"publication\" p , \"document\" d \n" +
+            "where a.pubid =p.pubid and p.pubid =d.pubid and (a.\"name\" =#{authorName} or p.title =#{title}  or p.\"date\" =#{date} )")
+    List<Doc> queryDocByMetadata(@Param("authorName") String authorName, @Param("date")String date, @Param("title")String title);
+
+    /**
+     * Todo..
+     * queryDocBySolrDocId
+     */
+    @Select("select distinct docid, filename from document where solrid=#{solrdocid}")
+    Doc queryDocBySolrDocId(@Param("solrdocid") String solrdocid);
 }

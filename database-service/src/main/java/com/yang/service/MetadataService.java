@@ -9,6 +9,7 @@ import org.springframework.stereotype.Service;
 import pojo.Doc;
 import pojo.Metadata;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -28,5 +29,12 @@ public class MetadataService {
 
     public List<Doc> queryDocByMetadata(String authorName, String date, String title){
         return metadataMapper.queryDocByMetadata(authorName, date, title);
+    }
+    public List<Doc> queryDocBySolrDocId(List<String> solrDocIds){
+        List<Doc> docs = new ArrayList<>();
+        for (int i = 0; i < solrDocIds.size(); i++) {
+            docs.add(metadataMapper.queryDocBySolrDocId(solrDocIds.get(i)));
+        }
+        return docs;
     }
 }

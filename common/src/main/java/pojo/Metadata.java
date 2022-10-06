@@ -2,6 +2,7 @@ package pojo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
@@ -12,13 +13,16 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Getter
 public class Metadata {
-    private Author[] author;
-    private Organization organization;
-    private String title;
-    private String date;
-    private String filename;
-    private String fileSize;
-    private String fileType;
+    public Author author;
+    public Organization organization;
+    public int pubid;
+    public String title;
+    public String date;
+    public String filename;
+    public String fileSize;
+    public String fileType;
+
 
 }
