@@ -15,11 +15,10 @@ kind: "postgresql"
 apiVersion: "acid.zalan.do/v1"
 
 metadata:
-  name: "acid-postgresforsolr"
+  name: "acid-postgres"
   namespace: "default"
   labels:
     team: acid
-
 spec:
   teamId: "acid"
   postgresql:
@@ -27,19 +26,15 @@ spec:
   numberOfInstances: 4
   enableMasterLoadBalancer: true
   enableReplicaLoadBalancer: true
-  enableConnectionPooler: true
   volume:
     size: "5Gi"
   users:
-    admin: 
-      - superuser
-      - createdb
+    postgres: 
+    - superuser
   databases:
-    test: admin
-    solr: admin
+    Library: postgres
+    test: postgres
   allowedSourceRanges:
-    # IP ranges to access your cluster go here
-
 
   resources:
     requests:
@@ -82,9 +77,9 @@ success:
 
 ### LB for master
 
-Then I found a loadbalancer on k8s created by postgres-operator, it listens on port 30526
+Then I found a loadbalancer for master and a loadbalancer for replica on k8s created by postgres-operator, it listens on port 30414 and 31104
 
-![image-20220618020909796](https://markdown-1301334775.cos.eu-frankfurt.myqcloud.com/image-20220618020909796.png)
+![image-20221004205802295](https://markdown-1301334775.cos.eu-frankfurt.myqcloud.com/image-20221004205802295.png)
 
 
 
@@ -96,24 +91,26 @@ Lets take a look at the secret created by the operator, and use the secret to co
 
 
 
-After changing the password to 'root', we can use whatever tool we have from our own computer to connect to the postgresql cluster master by: 
+## DO NOT CHANGE THE PASSWORD, OTHERWISE THE OPERATOR WOULD NOT GET THE NEW PASSWORD AND THROW AN EXCEPTION
 
-+ 129.69.209.197:30526
+we can use whatever tool we have from our own computer to connect to the postgresql cluster master by: 
+
++ 129.69.209.197:30414
 + username:postgres
-+ password:root
++ password:XvR7XF6nbt7OjCjMEENiROPo9J3yqIk3CfT1AJHKXSPxrFANnTZ9A3N2bU8pW4jj
 
 And the postgresql cluster master by: 
 
-+ 129.69.209.197:31190
++ 129.69.209.197:31104
 + username:postgres
-+ password:root
++ password:XvR7XF6nbt7OjCjMEENiROPo9J3yqIk3CfT1AJHKXSPxrFANnTZ9A3N2bU8pW4jj
 
 Example:
 
-![image-20220618021438928](https://markdown-1301334775.cos.eu-frankfurt.myqcloud.com/image-20220618021438928.png)
+![image-20221004205947969](https://markdown-1301334775.cos.eu-frankfurt.myqcloud.com/image-20221004205947969.png)
 
 
 
-And the log of the cluster can be found on :http://129.69.209.197:30398/#/logs/default/acid-postgresforsolr
+And the log of the cluster can be found on :http://129.69.209.197:30398/#/logs/default/acid-postgres
 
-![image-20220618021537360](https://markdown-1301334775.cos.eu-frankfurt.myqcloud.com/image-20220618021537360.png)
+![image-20221004210025272](https://markdown-1301334775.cos.eu-frankfurt.myqcloud.com/image-20221004210025272.png)

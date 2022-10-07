@@ -1,6 +1,5 @@
 package com.yang.web;
 
-import com.yang.pojo.Doc;
 import com.yang.servcie.DocService;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
@@ -11,6 +10,7 @@ import org.apache.solr.common.SolrInputDocument;
 import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import pojo.Doc;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -19,10 +19,11 @@ import java.util.List;
 
 /**
  * get the request which related to operate the solr cloud
- * @Author: Yang Haoran
+ * @Author: Soheb, Yang Haoran
  * @Date: 01-08-2022 11:29:50
  */
 @RestController
+@CrossOrigin
 @RequestMapping("solr")
 public class SolrController {
 
@@ -41,7 +42,7 @@ public class SolrController {
      * @return
      */
     @GetMapping("/query/{keywords}")
-    public List<Doc> querySolr(@PathVariable("keywords") String keywords){
+    public List<String> querySolr(@PathVariable("keywords") String keywords){
        return docService.querySolr(keywords);
     }
 

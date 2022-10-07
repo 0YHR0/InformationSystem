@@ -20,6 +20,11 @@
             <groupId>mysql</groupId>
             <artifactId>mysql-connector-java</artifactId>
         </dependency>
+        <dependency>
+            <groupId>com.emc.ecs</groupId>
+            <artifactId>nfs-client</artifactId>
+            <version>1.0.3</version>
+        </dependency>
         <!--mybatis-->
 <!--        <dependency>-->
 <!--            <groupId>org.mybatis.spring.boot</groupId>-->
@@ -57,7 +62,13 @@
             <artifactId>springfox-swagger-ui</artifactId>
             <version>2.9.2</version>
         </dependency>
-<!--        <dependency>-->
+        <dependency>
+            <groupId>com.yang</groupId>
+            <artifactId>database-service</artifactId>
+            <version>1.0</version>
+            <scope>compile</scope>
+        </dependency>
+        <!--        <dependency>-->
 <!--            <groupId>cn.itcast.demo</groupId>-->
 <!--            <artifactId>feign-api</artifactId>-->
 <!--            <version>1.0</version>-->

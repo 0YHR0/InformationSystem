@@ -31,3 +31,5 @@ This microservice is used for connecting and operating nfs
 
 ## user-service
 This microservice is used for all the logics of the project
+
+The documentation of api can be found when running the service and accecss: http://ip:port/swagger-ui.html

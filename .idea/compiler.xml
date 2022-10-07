@@ -9,7 +9,9 @@
         <outputRelativeToContentRoot value="true" />
         <module name="database-service" />
         <module name="user-service" />
+        <module name="common" />
         <module name="feign-api" />
+        <module name="solr-service" />
         <module name="searchingEngine-service" />
       </profile>
     </annotationProcessing>
@@ -22,12 +24,14 @@
   </component>
   <component name="JavacSettings">
     <option name="ADDITIONAL_OPTIONS_OVERRIDE">
+      <module name="common" options="-parameters" />
       <module name="database-service" options="-parameters" />
       <module name="doc-service" options="-parameters" />
       <module name="feign-api" options="-parameters" />
       <module name="searchEngine-service" options="-parameters" />
       <module name="searching-service" options="-parameters" />
       <module name="searchingEngine-service" options="-parameters" />
+      <module name="solr-service" options="-parameters" />
       <module name="user-service" options="-parameters" />
       <module name="userservice" options="-parameters" />
     </option>

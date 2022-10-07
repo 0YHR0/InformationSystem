@@ -12,6 +12,7 @@
         <module>feign-api</module>
         <module>database-service</module>
         <module>searchEngine-service</module>
+        <module>common</module>
     </modules>
 
     <properties>

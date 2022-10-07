@@ -1,14 +1,16 @@
 package com.yang.web;
 
-import com.yang.pojo.Author;
-import com.yang.pojo.Doc;
-import com.yang.pojo.Metadata;
+
 import com.yang.service.AuthorService;
 import com.yang.service.MetadataService;
 import com.yang.service.SolrIdService;
 import io.swagger.annotations.ApiParam;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
+import pojo.Author;
+import pojo.Doc;
+import pojo.Metadata;
+
 
 import java.util.List;
 
@@ -18,6 +20,7 @@ import java.util.List;
  * @Date: 01-08-2022 11:28:50
  */
 @RestController
+@CrossOrigin
 @RequestMapping("postgresql")
 public class PostgresqlController {
 
@@ -51,8 +54,8 @@ public class PostgresqlController {
      * @param metadata
      * @return docid
      */
-    @GetMapping("/createDoc/{metadata}/{path}/{objectId}")
-    public int createDoc(@PathVariable("metadata") Metadata metadata, @PathVariable("path") String path, @PathVariable("objectId") String objectId){
+    @PostMapping("/createDoc/{path}/{objectId}")
+    public int createDoc(@RequestBody Metadata metadata, @PathVariable("path") String path, @PathVariable("objectId") String objectId){
         System.out.println("create: metadata " + metadata + "path: " + path + "objectId: " + objectId);
         return metadataService.createDoc(metadata, path, objectId);
     }
@@ -71,13 +74,24 @@ public class PostgresqlController {
 
     /**
      * queryDocByMetadata
-     * @param metadata
+     * @param authorName
+     * @param date
+     * @param title
      * @return
      */
-    @GetMapping("/query")
-    public List<Doc> queryDocByMetadata(@RequestParam("metadata") Metadata metadata){
-        System.out.println("query by metadata: " + metadata);
-        return metadataService.queryDocByMetadata(metadata);
+    @GetMapping("/queryByMetadata")
+    public List<Doc> queryDocByMetadata(@RequestParam("authorName") String authorName, @RequestParam("date") String date, @RequestParam("title")String title){
+        System.out.println("query by authorname: " + authorName);
+        return metadataService.queryDocByMetadata(authorName, date, title);
+    }
+
+    /**
+     * queryDocBySolrDocId(objectId)
+     */
+    @GetMapping("/queryBySolrDocId")
+    public List<Doc> queryDocBySolrDocId(@RequestParam List<String> objectIds){
+        System.out.println(objectIds.toArray().toString());
+        return metadataService.queryDocBySolrDocId(objectIds);
     }
 
 }

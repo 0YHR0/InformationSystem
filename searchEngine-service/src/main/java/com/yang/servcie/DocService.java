@@ -1,48 +1,34 @@
 package com.yang.servcie;
 
-import com.yang.pojo.Doc;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.mime.MultipartEntity;
-import org.apache.http.impl.client.DefaultHttpClient;
+import org.apache.commons.io.IOUtils;
 import org.apache.solr.client.solrj.SolrClient;
 import org.apache.solr.client.solrj.SolrQuery;
 import org.apache.solr.client.solrj.SolrServerException;
-import org.apache.solr.client.solrj.SolrRequest.METHOD;
-import org.apache.solr.client.solrj.impl.CloudSolrClient;
-import org.apache.solr.client.solrj.impl.HttpSolrClient;
-import org.apache.solr.client.solrj.request.ContentStreamUpdateRequest;
 import org.apache.solr.client.solrj.response.QueryResponse;
-import org.apache.solr.client.solrj.response.UpdateResponse;
-import org.apache.solr.client.solrj.request.UpdateRequest;
 import org.apache.solr.common.SolrDocument;
 import org.apache.solr.common.SolrDocumentList;
-import org.apache.solr.common.SolrInputDocument;
-import org.apache.solr.common.params.ExpandParams;
-import org.apache.solr.common.util.ContentStreamBase;
-import org.apache.solr.common.util.NamedList;
-import org.apache.solr.common.util.ContentStreamBase.FileStream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.bind.annotation.PathVariable;
+
+import com.emc.ecs.nfsclient.nfs.io.Nfs3File;
+import com.emc.ecs.nfsclient.nfs.io.NfsFileInputStream;
+import com.emc.ecs.nfsclient.nfs.nfs3.Nfs3;
+import com.emc.ecs.nfsclient.rpc.CredentialUnix;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
-import java.util.UUID;
-import java.io.File;
+import java.util.Map;
+import java.io.BufferedInputStream;
 
 
 /**
- * @author YHR
+ * @author Soheb, Yang Haoran
  * @date 2022/8/15 00:12:02
  * @description
  */
@@ -53,29 +39,53 @@ public class DocService {
     private SolrClient solrClient;
 
     @Value("${nfs.filepath}")
-    String filePath;
+    String NFS_DIR;
+
+    @Value("${nfs.ip}")
+    String NFS_IP;
+
+    @Value("${filetype.unknown}")
+    String ctype;
+
+    @Value("#{${filetype.known}}")
+    Map<String,String> fileType;
+
+    @Value("${spring.data.solr.host}")
+    String solrHost;
+
+    @Value("${spring.data.solr.command}")
+    String solrCommand;
 
     /**
      * Get the article by keywords
      * @param keywords
-     * @return a list of docs
+     * @return a list of solrdocId(ObjectId)
      */
-    public List<Doc> querySolr(String keywords){
-        SolrQuery query =  new SolrQuery(keywords);
+    public List<String> querySolr(String keywords){
+        SolrQuery query =  new SolrQuery(keywords).setRows(50);
         System.out.println("-------------------------------------------query--------------------------------");
+        ArrayList<String> res = new ArrayList<String>();
         QueryResponse response = new QueryResponse();
         try {
             response = solrClient.query(query);
+            if (response.getResults().getNumFound() > 50) {
+                SolrQuery largeQuery =  new SolrQuery(keywords).setRows((int) response.getResults().getNumFound()); 
+                response = solrClient.query(largeQuery);
+            }
         } catch (SolrServerException e) {
             e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         }
+        
         SolrDocumentList documents = response.getResults();
         for(SolrDocument document : documents) {
-            System.out.println(document);
+            if(document.getFieldValue("id") != null)
+            {
+                res.add((String) document.getFieldValue("id"));
+            }
+            
           }
-        ArrayList<Doc> res = new ArrayList<Doc>();
         //Doc e = new Doc(metadata, path, ObjectId, docId)
         return res;
     }
@@ -83,11 +93,11 @@ public class DocService {
 
     /**
      * indexing the file
-     * @return solrdocID
+     * @return solrdocID,status_of_indexing
      */
     public String indexing(String path, String objectId) throws SolrServerException, IOException {
-        String completePath = filePath + path + objectId;
-        System.out.println(completePath);
+        InputStream inputStream = null;
+        String rMsg = objectId + ",Error";
         //ContentStreamUpdateRequest up = new ContentStreamUpdateRequest("/update/extract");
         //String tstPath = "C:/Users/Soheb/OneDrive/Desktop/tt.txt";
         //File file = new File(tstPath);
@@ -113,50 +123,46 @@ public class DocService {
         //UpdateResponse res = up.process(solrClient);
         //solrClient.request(up);
         //System.out.println(res);
-        String ftype = path.substring(path.length() - 4);
-        System.out.println(ftype);
-        String server = "http://129.69.209.197:30002/solr/testcore/update/extract?commitWithin=1000&overwrite=true&wt=json&literal.id=" + objectId;
+        String ftype = objectId.split("\\.")[1];
+        //System.out.println(ftype);
+        //String server = "http://129.69.209.197:30002/solr/testcore/update/extract?commitWithin=1000&overwrite=true&wt=json&literal.id=" + objectId;
+        String server = solrHost + solrCommand + "&literal.id=" + objectId;
+        System.out.println(server);
         URL url = new URL(server);
         HttpURLConnection http = (HttpURLConnection)url.openConnection();
         http.setRequestMethod("POST");
         http.setDoOutput(true);
-
-        if(ftype.equals(".pdf")){
-            http.setRequestProperty("Content-type", "application/pdf");
-        } else if(ftype.equals(".txt")){
-            http.setRequestProperty("Content-type", "text/plain");
-        } else if(ftype.equals(".csv")){
-            http.setRequestProperty("Content-type", "test/csv");
-        } else if(ftype.equals(".doc")){
-            http.setRequestProperty("Content-type", "application/msword");
-        } else {
-            http.setRequestProperty("Content-type", "application/octet-stream");
+        for (Map.Entry<String, String> entry : fileType.entrySet()) {
+            if(ftype.equals(entry.getKey())){
+                http.setRequestProperty("Content-type", entry.getValue());
+                break;
+            }
+            http.setRequestProperty("Content-type", ctype);
         }
 
-        //http.setRequestProperty("Content-type", "application/pdf");
+        try{
+            Nfs3 nfs3 = new Nfs3(NFS_IP, NFS_DIR, new CredentialUnix(0, 0, null), 3);
+            Nfs3File nfsFile = new Nfs3File(nfs3, "/"+ path + "/" + objectId);
+            inputStream = new BufferedInputStream(new NfsFileInputStream(nfsFile));
+            byte[] out = IOUtils.toByteArray(inputStream);
+            //byte[] data = new byte[inputStream.available()];
+            //inputStream.read(data);
+            OutputStream stream = http.getOutputStream();
+            stream.write(out);
+            stream.flush();
+            stream.close();
 
-        String data = "C:/Users/Soheb/OneDrive/Documents/pdf-test.pdf";
+            System.out.println(http.getResponseCode() + " " + http.getResponseMessage());
+            if(http.getResponseCode() == 200){
+                rMsg = objectId + ",indexed";
+            }
+            http.disconnect();
 
-        //byte[] out = data.getBytes(StandardCharsets.UTF_8);
-
-        byte[] out;
-
-        out = Files.readAllBytes(Paths.get(data));
-
-        OutputStream stream = http.getOutputStream();
-        stream.write(out);
-        stream.flush();
-        stream.close();
-
-        System.out.println(http.getResponseCode() + " " + http.getResponseMessage());
-        http.disconnect();
-
+        } catch (IOException ex){
+            ex.printStackTrace();
+        }
         //QueryResponse rsp = solrClient.query(new SolrQuery("id:" + objectId));
-     
-        //System.out.println(rsp);
-        //http://129.69.209.197:30002/solr/testcore/update/extract?commitWithin=1000&overwrite=true&wt=json&literal.id=test03
-        
-        return objectId;
+        return rMsg;
     }
 
 

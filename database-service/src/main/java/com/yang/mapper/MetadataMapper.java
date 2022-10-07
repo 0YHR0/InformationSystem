@@ -1,11 +1,11 @@
 package com.yang.mapper;
 
-import com.yang.pojo.Author;
-import com.yang.pojo.Doc;
-import com.yang.pojo.Metadata;
+
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Select;
+import pojo.Doc;
+import pojo.Metadata;
 
 import java.util.List;
 
@@ -28,9 +28,18 @@ public interface MetadataMapper {
     /**
      * Todo...
      * queryDocByMetadata
-     * @param metadata
+     * @param authorName
+     * @param date
+     * @param title
      * @return
      */
     @Select("xxxx #{metadata}")
-    List<Doc> queryDocByMetadata(@Param("metadata") Metadata metadata);
+    List<Doc> queryDocByMetadata(@Param("authorname") String authorName, @Param("date")String date, @Param("title")String title);
+
+    /**
+     * Todo..
+     * queryDocBySolrDocId
+     */
+    @Select("xxx #{solrdocid}")
+    Doc queryDocBySolrDocId(@Param("solrdocid") String solrdocid);
 }
