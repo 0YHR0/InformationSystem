@@ -2,6 +2,7 @@ package pojo;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 /**
@@ -12,8 +13,9 @@ import lombok.NoArgsConstructor;
 @Data
 @AllArgsConstructor
 @NoArgsConstructor
+@Getter
 public class Organization {
-    private int orgId;
-    private String name;
-    private String address;
+    public int orgId;
+    public String name;
+    public String address;
 }
