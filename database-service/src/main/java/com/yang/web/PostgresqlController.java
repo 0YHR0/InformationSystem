@@ -56,8 +56,9 @@ public class PostgresqlController {
      */
     @PostMapping("/createDoc/{path}/{objectId}")
     public int createDoc(@RequestBody Metadata metadata, @PathVariable("path") String path, @PathVariable("objectId") String objectId){
-        System.out.println("create: metadata " + metadata + "path: " + path + "objectId: " + objectId);
-        return metadataService.createDoc(metadata, path, objectId);
+        String actualPath = path.replaceAll("@","/");
+        System.out.println("create: metadata " + metadata + "path: " + actualPath + "objectId: " + objectId);
+        return metadataService.createDoc(metadata, actualPath, objectId);
     }
 
     /**

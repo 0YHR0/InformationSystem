@@ -62,15 +62,18 @@ public class UserController {
         /**
          * create the metadata of the file to db
          */
+
         System.out.println("metadata:" + metadata);
-        int docId = databaseClient.createDocToDB(metadata, filePath, objectId);
+        String filepathForUrl = filePath.replaceAll("/", "@");
+        System.out.println("filepathForURL" + filepathForUrl);
+        int docId = databaseClient.createDocToDB(metadata, filepathForUrl, objectId);
 
         /**
          * indexing the doc
          */
 
-        String solrDocId = "xxx";
-        searchEngineClient.indexing(filePath, objectId);
+
+        String solrDocId = searchEngineClient.indexing(filePath, objectId);
 
         /**
          * update solr doc ID
@@ -78,7 +81,7 @@ public class UserController {
         System.out.println("docId: " + docId + "solrdocId: " + solrDocId);
         int status = databaseClient.updateSolrDocId(docId, solrDocId);
 
-        return "OK";
+        return "status: " + status;
     }
 
     /**
