@@ -71,8 +71,6 @@ public class UserController {
         /**
          * indexing the doc
          */
-
-
         String solrDocId = searchEngineClient.indexing(filepathForUrl, objectId);
 
         /**

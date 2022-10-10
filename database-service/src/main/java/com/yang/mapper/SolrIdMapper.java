@@ -1,6 +1,7 @@
 package com.yang.mapper;
 
 
+import org.apache.ibatis.annotations.Mapper;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
 
@@ -10,6 +11,7 @@ import org.apache.ibatis.annotations.Update;
  * @date 2022/8/14 56:21:42
  * @description
  */
+@Mapper
 public interface SolrIdMapper {
     /**
      * @param docId: the id of the document

@@ -82,7 +82,8 @@ public class DocService {
         for(SolrDocument document : documents) {
             if(document.getFieldValue("id") != null)
             {
-                res.add((String) document.getFieldValue("id"));
+                System.out.println(document.getFieldValue("id"));
+                res.add((String) document.getFieldValue("id") + ",indexed");
             }
             
           }

@@ -98,7 +98,7 @@ public class PostgresqlController {
      */
     @GetMapping("/queryBySolrDocId")
     public List<Doc> queryDocBySolrDocId(@RequestParam List<String> objectIds){
-        System.out.println(objectIds.toArray().toString());
+//        System.out.println(objectIds.toArray().toString());
         return metadataService.queryDocBySolrDocId(objectIds);
     }
 

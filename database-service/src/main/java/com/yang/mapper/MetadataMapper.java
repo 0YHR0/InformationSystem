@@ -1,9 +1,6 @@
 package com.yang.mapper;
 
-import org.apache.ibatis.annotations.Insert;
-import org.apache.ibatis.annotations.Param;
-import org.apache.ibatis.annotations.Select;
-import org.apache.ibatis.annotations.Update;
+import org.apache.ibatis.annotations.*;
 import pojo.Doc;
 import pojo.Metadata;
 
@@ -14,6 +11,7 @@ import java.util.List;
  * @Author: Liu Yuxin, Yang Haoran
  * @Date: 01-08-2022 11:27:23
  */
+@Mapper
 public interface MetadataMapper {
 
     /**
@@ -21,36 +19,39 @@ public interface MetadataMapper {
      * @param metadata
      * @return docid of the doc
      */
-    @Insert("insert into organization(orgid,name,address) values(#{metadata.organization.orgId},#{metadata.organization.name},#{metadata.organization.address});\n"+
-            "insert into publication(pubid,orgid,title,date) values(#{metadata.pubid},#{metadata.organization.orgId},#{metadata.title},#{metadata.date});\n"+
-            "insert into author(authorid,name,pubid) values(#{metadata.author.authorid}, #{metadata.author.name}, #{metadata.pubid});\n"+
-            "insert into nfsserver(mntpath) values(#{path});\n"+
-            "insert into document(pubid,type,size,filename,objectid) values(#{metadata.pubid},#{metadata.fileType},#{metadata.fileSize},#{metadata.filename},#{objectId});\n"+
-            "update document set nfsid =(select nfsid from nfsserver where mntpath='${path}' LIMIT 1) where objectid='${objectId}'")
-    int createDoc(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
+//    @Insert("insert into organization(orgid,name,address) values(#{metadata.organization.orgId},#{metadata.organization.name},#{metadata.organization.address});\n"+
+//            "insert into publication(pubid,orgid,title,date) values(#{metadata.pubid},#{metadata.organization.orgId},#{metadata.title},#{metadata.date});\n"+
+//            "insert into author(authorid,name,pubid) values(#{metadata.author.authorid}, #{metadata.author.name}, #{metadata.pubid});\n"+
+//            "insert into nfsserver(mntpath) values(#{path});\n"+
+//            "insert into document(pubid,type,size,filename,objectid) values(#{metadata.pubid},#{metadata.fileType},#{metadata.fileSize},#{metadata.filename},#{objectId});\n"+
+//            "update document set nfsid =(select nfsid from nfsserver where mntpath='${path}' LIMIT 1) where objectid='${objectId}'")
+//    int createDoc(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
 
-    /**
-     *
-     * same with the above one function, used to test individually
-    @Insert("insert into organization(orgid,name,address) values(#{metadata.organization.orgId},#{metadata.organization.name},#{metadata.organization.address})")
-    int createDocToOrganozation(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
 
-    @Insert("insert into publication(pubid,orgid,title,date) values(#{metadata.pubid},#{metadata.organization.orgId},#{metadata.title},#{metadata.date})")
-    int createDocToPublication(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
 
-    @Insert("insert into author(authorid,name,pubid) values(#{metadata.author.authorid}, #{metadata.author.name}, #{metadata.pubid})")
-    int createDocToAuthor(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
+    @Select("insert into organization(orgid,name,address) values(default,#{metadata.organization.name},#{metadata.organization.address}) returning orgid")
+    @Options(flushCache = Options.FlushCachePolicy.TRUE)
+    int createDocToOrganization(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
+
+    @Select("insert into publication(pubid,orgid,title,date) values(default,#{orgid},#{metadata.title},#{metadata.date}) returning pubid")
+    @Options(flushCache = Options.FlushCachePolicy.TRUE)
+    int createDocToPublication(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId, @Param("orgid")int orgid);
+
+    @Select("insert into author(authorid,name,pubid) values(default, #{metadata.author.name}, #{pubid}) returning authorid")
+    @Options(flushCache = Options.FlushCachePolicy.TRUE)
+    int createDocToAuthor(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId, @Param("pubid")int pubid);
 
     @Insert("insert into nfsserver(mntpath) values(#{path})")
     int createDocToNfsServer(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
 
-    @Insert("insert into document(pubid,type,size,filename,objectid) values(#{metadata.pubid},#{metadata.fileType},#{metadata.fileSize},#{metadata.filename},#{objectId})")
-    int createDocToDocument(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
+    @Select("insert into document(docid, pubid,type,size,filename,objectid) values(default, #{pubid},#{metadata.fileType},#{metadata.fileSize},#{metadata.filename},#{objectId}) returning docid")
+    @Options(flushCache = Options.FlushCachePolicy.TRUE)
+    int createDocToDocument(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId, @Param("pubid")int pubid);
 
     @Update("update document set nfsid =(select nfsid from nfsserver where mntpath='${path}' LIMIT 1) where objectid='${objectId}'")
     int updateDocToDocument(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
 
-    **/
+
 
 
 

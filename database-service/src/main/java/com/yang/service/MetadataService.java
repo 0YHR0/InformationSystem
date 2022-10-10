@@ -31,21 +31,21 @@ public class MetadataService {
      * @return status
      */
     public int createDoc(Metadata metadata, String path, String objectId){
-//        System.out.println("createDoc: metadata" + metadata + " path: " + path + " objectId: " + objectId);
-//        int result1 = metadataMapper.createDocToOrganozation(metadata, path, objectId);
-//        System.out.println("createDocToOrganozation result: " + result1);
-//        int result2 =metadataMapper.createDocToPublication(metadata, path, objectId);
-//        System.out.println("createDocToPublication result: " + result2);
-//        int result3 =metadataMapper.createDocToAuthor(metadata, path, objectId);
-//        System.out.println("createDocToAuthor result: " + result3);
-//        int result4 =metadataMapper.createDocToNfsServer(metadata, path, objectId);
-//        System.out.println("createDocToNfsServer result: " + result4);
-//        int result5 =metadataMapper.createDocToDocument(metadata, path, objectId);
-//        System.out.println("createDocToDocument result: " + result5);
-//        int result6 = metadataMapper.updateDocToDocument(metadata, path, objectId);
-//        System.out.println("updateDocToDocument result: " + result6);
-//        return  result1*result2*result3*result4*result5*result6;
-        return metadataMapper.createDoc(metadata, path, objectId);
+        System.out.println("createDoc: metadata" + metadata + " path: " + path + " objectId: " + objectId);
+        int orgid = metadataMapper.createDocToOrganization(metadata, path, objectId);
+        System.out.println("orgid: " + orgid);
+        int pubid =metadataMapper.createDocToPublication(metadata, path, objectId, orgid);
+        System.out.println("pubid: " + pubid);
+        int authorid =metadataMapper.createDocToAuthor(metadata, path, objectId, pubid);
+        System.out.println("authorid: " + authorid);
+        int result4 =metadataMapper.createDocToNfsServer(metadata, path, objectId);
+        System.out.println("createDocToNfsServer result: " + result4);
+        int docid =metadataMapper.createDocToDocument(metadata, path, objectId, pubid);
+        System.out.println("docid: " + docid);
+        int result6 = metadataMapper.updateDocToDocument(metadata, path, objectId);
+        System.out.println("updateDocToDocument result: " + result6);
+        return  docid;
+//        return metadataMapper.createDoc(metadata, path, objectId);
     }
 
     /**
@@ -67,6 +67,7 @@ public class MetadataService {
     public List<Doc> queryDocBySolrDocId(List<String> solrDocIds){
         List<Doc> docs = new ArrayList<>();
         for (int i = 0; i < solrDocIds.size(); i++) {
+            System.out.println(solrDocIds.get(i));
             docs.add(metadataMapper.queryDocBySolrDocId(solrDocIds.get(i)));
         }
         return docs;
