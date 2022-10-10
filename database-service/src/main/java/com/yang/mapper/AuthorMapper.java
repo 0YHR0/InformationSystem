@@ -8,7 +8,7 @@ import pojo.Author;
 
 /**
  * This is a mapper for operating author of the doc
- * @Author: Yang Haoran
+ * @Author: Liu Yuxin, Yang Haoran
  * @Date: 01-08-2022 11:25:00
  */
 @DS("replica")
@@ -18,7 +18,7 @@ public interface AuthorMapper {
      * @param name: the name of the author
      * @return author
      */
-    @Select("select name from author where name = #{name}")
+    @Select("select authorid,name from author where name = #{name}")
     Author findByName(@Param("name") String name);
 
 }

@@ -142,7 +142,8 @@ public class DocService {
 
         try{
             Nfs3 nfs3 = new Nfs3(NFS_IP, NFS_DIR, new CredentialUnix(0, 0, null), 3);
-            Nfs3File nfsFile = new Nfs3File(nfs3, "/"+ path + "/" + objectId);
+            System.out.println("path = " + path + "/" + objectId);
+            Nfs3File nfsFile = new Nfs3File(nfs3, "/" + objectId);
             inputStream = new BufferedInputStream(new NfsFileInputStream(nfsFile));
             byte[] out = IOUtils.toByteArray(inputStream);
             //byte[] data = new byte[inputStream.available()];

@@ -7,7 +7,7 @@ spring:
       discovery:
         cluster-name: Stuttgart # 集群名称
   application:
-    name: solr-service  #服务名称
+    name: searchEngine-service  #服务名称
   data:
     solr:
       host: http://129.69.209.197:30002/solr/testcore

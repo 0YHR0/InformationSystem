@@ -73,7 +73,7 @@ public class UserController {
          */
 
 
-        String solrDocId = searchEngineClient.indexing(filePath, objectId);
+        String solrDocId = searchEngineClient.indexing(filepathForUrl, objectId);
 
         /**
          * update solr doc ID
@@ -94,8 +94,9 @@ public class UserController {
      */
     @GetMapping("/search/{keywords}")
     public List<Doc> searchDoc(@RequestParam("authorname") String authorname, @RequestParam("date") String date, @RequestParam("title") String title, @PathVariable("keywords") String keywords){
-        System.out.println("search---> authorname: " + authorname + "date" + date + "title" + title + "keywords: " + keywords);
+        System.out.println("search---> authorname: " + authorname + "date: " + date + "title: " + title + "keywords: " + keywords);
         List<Doc> docs = new ArrayList<>();
+        System.out.println("queryDocByMetadata--->start");
         /**
          * query db for metadata
          */
@@ -104,21 +105,23 @@ public class UserController {
         /**
          * query searching engine for keywords
          */
+        System.out.println("querySolr--->start");
         List<String> docIdsFromSE = searchEngineClient.querySolr(keywords);
         /**
          * query the doc details from database using the solrdocId
          */
         docs.addAll(databaseClient.queryDocBySolrDocId(docIdsFromSE));
+        System.out.println("search results--->" + docs);
 
         return docs;
     }
 
     /**
      * Get the file that the user clicks
-     * @param path
+     * example: objectId=1111.txt
      */
     @GetMapping("/getFile")
-    public void getFile(@RequestParam("path") String path, @RequestParam("objectId") String objectId, HttpServletResponse response) throws IOException {
-        userService.getFile(path, objectId, response);
+    public void getFile(@RequestParam("objectId") String objectId, HttpServletResponse response) throws IOException {
+        userService.getFile(objectId, response);
     }
 }

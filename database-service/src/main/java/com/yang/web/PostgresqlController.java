@@ -31,6 +31,11 @@ public class PostgresqlController {
     @Autowired
     private SolrIdService solrIdService;
 
+    /**
+     * just for test
+     * @param id: test
+     * @return test
+     */
     @GetMapping("/test/{id}")
     public String test(@PathVariable("id") String id){
         System.out.println(id);
@@ -39,7 +44,7 @@ public class PostgresqlController {
 
     /**
      * Get the author by name
-     * @param name
+     * @param name: name of the author
      * @return author
      */
     @GetMapping("/author/{name}")
@@ -51,7 +56,7 @@ public class PostgresqlController {
 
     /**
      * create the doc in the db use metadata
-     * @param metadata
+     * @param metadata: metadata of the document
      * @return docid
      */
     @PostMapping("/createDoc/{path}/{objectId}")
@@ -63,9 +68,9 @@ public class PostgresqlController {
 
     /**
      * update the solrdocId to the db
-     * @param docId
-     * @param solrDocId
-     * @return
+     * @param docId: the id of the document
+     * @param solrDocId: id of the solr doc
+     * @return status
      */
     @GetMapping("/updateSolrDocId/{docId}/{solrDocId}")
     public int updateSolrDocId(@PathVariable("docId") int docId, @PathVariable("solrDocId") String solrDocId){
@@ -75,10 +80,10 @@ public class PostgresqlController {
 
     /**
      * queryDocByMetadata
-     * @param authorName
-     * @param date
-     * @param title
-     * @return
+     * @param authorName: name of the author
+     * @param date: date of the document
+     * @param title: title of the document
+     * @return a list of docs
      */
     @GetMapping("/queryByMetadata")
     public List<Doc> queryDocByMetadata(@RequestParam("authorName") String authorName, @RequestParam("date") String date, @RequestParam("title")String title){
@@ -87,7 +92,9 @@ public class PostgresqlController {
     }
 
     /**
-     * queryDocBySolrDocId(objectId)
+     * query by solr doc Id
+     * @param objectIds: ObjectId
+     * @return result
      */
     @GetMapping("/queryBySolrDocId")
     public List<Doc> queryDocBySolrDocId(@RequestParam List<String> objectIds){

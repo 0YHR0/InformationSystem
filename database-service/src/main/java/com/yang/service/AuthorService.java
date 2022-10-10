@@ -16,6 +16,11 @@ public class AuthorService {
     @Autowired
     private AuthorMapper authorMapper;
 
+    /**
+     * query the author by name
+     * @param name
+     * @return the author needed
+     */
     public Author queryByName(String name){
         return authorMapper.findByName(name);
     }

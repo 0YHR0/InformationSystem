@@ -6,9 +6,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 /**
- * @author YHR
+ * The service operating the solrId of the doc
+ * @author Yang Haoran
  * @date 2022/8/14 32:21:42
- * @description
  */
 @Service
 public class SolrIdService {
