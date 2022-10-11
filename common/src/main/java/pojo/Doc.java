@@ -47,4 +47,7 @@ public class Doc {
     @ApiModelProperty("Id of the document")
     public int docId;
 
+    @ApiModelProperty("whether the file is deleted")
+    public boolean isdeleted;
+
 }

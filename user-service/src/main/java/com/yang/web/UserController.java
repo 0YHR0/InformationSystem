@@ -100,6 +100,7 @@ public class UserController {
          */
         List<Doc> docFromDB = databaseClient.queryDocByMetadata(authorname, date, title);
         docs.addAll(docFromDB);
+        System.out.println("docs from db" + docs);
         /**
          * query searching engine for keywords
          */
@@ -108,7 +109,22 @@ public class UserController {
         /**
          * query the doc details from database using the solrdocId
          */
-        docs.addAll(databaseClient.queryDocBySolrDocId(docIdsFromSE));
+        List<Integer> docIdFromDb = new ArrayList<>();
+        for(Doc docdb: docs){
+            docIdFromDb.add(docdb.docId);
+        }
+        List<Doc> docBySolrDocId = databaseClient.queryDocBySolrDocId(docIdsFromSE);
+        for(Doc doc: docBySolrDocId){
+            System.out.println("querydocbysolrdocid: " + doc);
+            if(doc != null){
+                if(!docIdFromDb.contains(doc.docId)){
+                    System.out.println("adddocId: " + doc.docId);
+                    docs.add(doc);
+                }
+            }
+
+        }
+//        docs.addAll(databaseClient.queryDocBySolrDocId(docIdsFromSE));
         System.out.println("search results--->" + docs);
 
         return docs;
@@ -121,5 +137,19 @@ public class UserController {
     @GetMapping("/getFile")
     public void getFile(@RequestParam("objectId") String objectId, HttpServletResponse response) throws IOException {
         userService.getFile(objectId, response);
+    }
+
+    /**
+     * delete the file that the user needed
+     * @param objectId
+     * @return
+     */
+    @DeleteMapping("/deleteFile")
+    public String deleteFile(@RequestParam("objectId") String objectId){
+        if(databaseClient.deleteFile(objectId) == 1) {
+            return "success";
+        } else{
+            return "fail";
+        }
     }
 }

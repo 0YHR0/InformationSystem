@@ -2,6 +2,7 @@ package com.yang.web;
 
 
 import com.yang.service.AuthorService;
+import com.yang.service.DocumentService;
 import com.yang.service.MetadataService;
 import com.yang.service.SolrIdService;
 import io.swagger.annotations.ApiParam;
@@ -30,6 +31,8 @@ public class PostgresqlController {
     private MetadataService metadataService;
     @Autowired
     private SolrIdService solrIdService;
+    @Autowired
+    private DocumentService documentService;
 
     /**
      * just for test
@@ -98,8 +101,22 @@ public class PostgresqlController {
      */
     @GetMapping("/queryBySolrDocId")
     public List<Doc> queryDocBySolrDocId(@RequestParam List<String> objectIds){
+        for(String objectId:objectIds){
+            System.out.println("query by solr doc Id: " + objectId);
+        }
 //        System.out.println(objectIds.toArray().toString());
         return metadataService.queryDocBySolrDocId(objectIds);
+    }
+
+    /**
+     * delete the file by objectId
+     * @param objectId
+     * @return
+     */
+    @DeleteMapping("/deleteFile")
+    public int deleteFile(@RequestParam String objectId){
+        return documentService.deleteFile(objectId);
+
     }
 
 }

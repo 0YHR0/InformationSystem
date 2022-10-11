@@ -44,7 +44,7 @@ public interface MetadataMapper {
     @Insert("insert into nfsserver(mntpath) values(#{path})")
     int createDocToNfsServer(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId);
 
-    @Select("insert into document(docid, pubid,type,size,filename,objectid) values(default, #{pubid},#{metadata.fileType},#{metadata.fileSize},#{metadata.filename},#{objectId}) returning docid")
+    @Select("insert into document(docid, pubid,type,size,filename,objectid,isdeleted) values(default, #{pubid},#{metadata.fileType},#{metadata.fileSize},#{metadata.filename},#{objectId},false) returning docid")
     @Options(flushCache = Options.FlushCachePolicy.TRUE)
     int createDocToDocument(@Param("metadata") Metadata metadata, @Param("path") String path, @Param("objectId") String objectId, @Param("pubid")int pubid);
 
@@ -62,8 +62,8 @@ public interface MetadataMapper {
      * @param title: title of the document
      * @return a list of documents
      */
-    @Select("select distinct a.name, p.title, p.date, d.filename,d.size, d.type, n.mntpath, d.objectid, d.docid from author a, publication p, document d, nfsserver n\n" +
-            "where a.pubid =p.pubid and p.pubid =d.pubid and a.name =#{authorName} and p.title =#{title} and p.date=#{date} and d.nfsid= n.nfsid")
+    @Select("select distinct a.name, p.title, p.date, d.filename,d.size, d.type, n.mntpath, d.objectid, d.docid, d.isdeleted from author a, publication p, document d, nfsserver n\n" +
+            "where a.pubid =p.pubid and p.pubid =d.pubid and a.name =#{authorName} and p.title =#{title} and p.date=#{date} and d.nfsid= n.nfsid and d.isdeleted=false")
     List<Doc> queryDocByMetadata(@Param("authorName") String authorName, @Param("date")String date, @Param("title")String title);
 
     /**
@@ -71,6 +71,6 @@ public interface MetadataMapper {
      * @param solrdocid: ID of the solrdoc
      * @return the document needed
      */
-    @Select("select distinct a.name, p.title, p.date, d.filename,d.size, d.type, n.mntpath, d.objectid, d.docid from author a, publication p, document d, nfsserver n where solrid=#{solrdocid} and d.nfsid=n.nfsid and a.pubid =p.pubid and p.pubid =d.pubid")
+    @Select("select distinct a.name, p.title, p.date, d.filename,d.size, d.type, n.mntpath, d.objectid, d.docid, d.isdeleted from author a, publication p, document d, nfsserver n where d.isdeleted=false and solrid=#{solrdocid} and d.nfsid=n.nfsid and a.pubid =p.pubid and p.pubid =d.pubid")
     Doc queryDocBySolrDocId(@Param("solrdocid") String solrdocid);
 }

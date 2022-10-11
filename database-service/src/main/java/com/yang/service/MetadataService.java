@@ -70,6 +70,9 @@ public class MetadataService {
             System.out.println(solrDocIds.get(i));
             docs.add(metadataMapper.queryDocBySolrDocId(solrDocIds.get(i)));
         }
+        for(Doc doc: docs){
+            System.out.println("queryDocBySolrDocId result: " + doc );
+        }
         return docs;
     }
 }

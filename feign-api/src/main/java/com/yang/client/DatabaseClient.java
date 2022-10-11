@@ -28,4 +28,7 @@ public interface DatabaseClient {
     @GetMapping("/postgresql/queryBySolrDocId")
     List<Doc> queryDocBySolrDocId(@RequestParam List<String> objectIds);
 
+    @DeleteMapping("/postgresql/deleteFile")
+    int deleteFile(@RequestParam String objectId);
+
 }
