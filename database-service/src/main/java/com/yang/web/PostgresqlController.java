@@ -89,9 +89,9 @@ public class PostgresqlController {
      * @return a list of docs
      */
     @GetMapping("/queryByMetadata")
-    public List<Doc> queryDocByMetadata(@RequestParam("authorName") String authorName, @RequestParam("date") String date, @RequestParam("title")String title){
+    public List<Doc> queryDocByMetadata(@RequestParam("authorName") String authorName, @RequestParam("date") String date, @RequestParam("title")String title, @RequestParam("addData")String addData){
         System.out.println("query by authorname: " + authorName);
-        return metadataService.queryDocByMetadata(authorName, date, title);
+        return metadataService.queryDocByMetadata(authorName, date, title, addData);
     }
 
     /**
