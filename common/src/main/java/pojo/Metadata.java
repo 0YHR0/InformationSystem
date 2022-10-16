@@ -43,5 +43,8 @@ public class Metadata {
     @ApiModelProperty("filetype of the document")
     public String fileType;
 
+    @ApiModelProperty("additional metadata of the user")
+    public String addData;
+
 
 }

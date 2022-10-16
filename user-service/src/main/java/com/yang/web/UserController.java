@@ -24,7 +24,7 @@ import java.util.UUID;
  * @Date: 01-08-2022 11:30:21
  */
 @RestController
-@CrossOrigin
+@CrossOrigin("*")
 @RequestMapping("user")
 public class UserController {
 
@@ -91,14 +91,14 @@ public class UserController {
      * @return
      */
     @GetMapping("/search/{keywords}")
-    public List<Doc> searchDoc(@RequestParam("authorname") String authorname, @RequestParam("date") String date, @RequestParam("title") String title, @PathVariable("keywords") String keywords){
-        System.out.println("search---> authorname: " + authorname + "date: " + date + "title: " + title + "keywords: " + keywords);
+    public List<Doc> searchDoc(@RequestParam("authorname") String authorname, @RequestParam("date") String date, @RequestParam("title") String title, @RequestParam(value = "addData", required = false) String addData, @PathVariable("keywords") String keywords){
+        System.out.println("search---> authorname: " + authorname + "date: " + date + "title: " + title + "addData: " + addData + "keywords: " + keywords);
         List<Doc> docs = new ArrayList<>();
         System.out.println("queryDocByMetadata--->start");
         /**
          * query db for metadata
          */
-        List<Doc> docFromDB = databaseClient.queryDocByMetadata(authorname, date, title);
+        List<Doc> docFromDB = databaseClient.queryDocByMetadata(authorname, date, title, addData);
         docs.addAll(docFromDB);
         System.out.println("docs from db" + docs);
         /**
