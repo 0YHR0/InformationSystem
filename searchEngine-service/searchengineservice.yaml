@@ -14,7 +14,7 @@ spec:
         run: searchengineservice
     spec:
       containers:
-        - image: 0yhr0/searchengine-service:1.0.0
+        - image: 0yhr0/searchengine-service:1.1.0
           name: searchengineservice
           ports:
             - containerPort: 8083

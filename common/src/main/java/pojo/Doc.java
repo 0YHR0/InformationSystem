@@ -50,4 +50,7 @@ public class Doc {
     @ApiModelProperty("whether the file is deleted")
     public boolean isdeleted;
 
+    @ApiModelProperty("additional metadata of the user")
+    public String publication_json;
+
 }

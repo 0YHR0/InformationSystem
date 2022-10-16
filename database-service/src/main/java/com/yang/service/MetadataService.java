@@ -1,5 +1,6 @@
 package com.yang.service;
 
+import com.alibaba.fastjson.JSON;
 import com.yang.mapper.AuthorMapper;
 import com.yang.mapper.MetadataMapper;
 
@@ -10,7 +11,9 @@ import pojo.Doc;
 import pojo.Metadata;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The service operating the metadata of the doc
@@ -55,7 +58,13 @@ public class MetadataService {
      * @param title: title of the document
      * @return the query esult
      */
-    public List<Doc> queryDocByMetadata(String authorName, String date, String title){
+    public List<Doc> queryDocByMetadata(String authorName, String date, String title, String addData){
+        List<HashMap> readJson2List = JSON.parseArray("[" + addData + "]",HashMap.class);
+        for(HashMap<String, Object> map : readJson2List){
+            for(Map.Entry<String, Object> entry: map.entrySet()){
+                System.out.println("key: " + entry.getKey() + "  value:" + entry.getValue());
+            }
+        }
         return metadataMapper.queryDocByMetadata(authorName, date, title);
     }
 

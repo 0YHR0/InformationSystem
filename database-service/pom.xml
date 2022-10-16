@@ -77,6 +77,11 @@
             <artifactId>common</artifactId>
             <version>1.0</version>
         </dependency>
+        <dependency>
+            <groupId>com.alibaba</groupId>
+            <artifactId>fastjson</artifactId>
+            <version>2.0.14</version>
+        </dependency>
         <!--        <dependency>-->
         <!--            <groupId>cn.itcast.demo</groupId>-->
         <!--            <artifactId>feign-api</artifactId>-->

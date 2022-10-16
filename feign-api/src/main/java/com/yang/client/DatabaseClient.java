@@ -23,7 +23,7 @@ public interface DatabaseClient {
     int updateSolrDocId(@PathVariable("docId") int docId, @PathVariable("solrDocId") String solrDocId);
 
     @GetMapping("/postgresql/queryByMetadata")
-    List<Doc> queryDocByMetadata(@RequestParam("authorName") String authorName, @RequestParam("date") String date, @RequestParam("title")String title);
+    List<Doc> queryDocByMetadata(@RequestParam("authorName") String authorName, @RequestParam("date") String date, @RequestParam("title")String title, @RequestParam("addData")String addData);
 
     @GetMapping("/postgresql/queryBySolrDocId")
     List<Doc> queryDocBySolrDocId(@RequestParam List<String> objectIds);

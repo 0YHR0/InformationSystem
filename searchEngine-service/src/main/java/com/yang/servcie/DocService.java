@@ -83,7 +83,7 @@ public class DocService {
             if(document.getFieldValue("id") != null)
             {
                 System.out.println(document.getFieldValue("id"));
-                res.add((String) document.getFieldValue("id") + ",indexed");
+                res.add((String) document.getFieldValue("id") + "indexed");
             }
             
           }
@@ -98,7 +98,7 @@ public class DocService {
      */
     public String indexing(String path, String objectId) throws SolrServerException, IOException {
         InputStream inputStream = null;
-        String rMsg = objectId + ",Error";
+        String rMsg = objectId + "-Error";
         //ContentStreamUpdateRequest up = new ContentStreamUpdateRequest("/update/extract");
         //String tstPath = "C:/Users/Soheb/OneDrive/Desktop/tt.txt";
         //File file = new File(tstPath);
@@ -156,7 +156,7 @@ public class DocService {
 
             System.out.println(http.getResponseCode() + " " + http.getResponseMessage());
             if(http.getResponseCode() == 200){
-                rMsg = objectId + ",indexed";
+                rMsg = objectId + "indexed";
             }
             http.disconnect();
 
