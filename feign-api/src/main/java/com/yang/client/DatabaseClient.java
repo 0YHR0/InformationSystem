@@ -12,7 +12,6 @@ import java.util.List;
  * call the database service
  * @author YHR
  * @date 2022/8/14 56:21:04
- * @description
  */
 @FeignClient("database-service")
 public interface DatabaseClient {
@@ -23,10 +22,13 @@ public interface DatabaseClient {
     @GetMapping("/postgresql/updateSolrDocId/{docId}/{solrDocId}")
     int updateSolrDocId(@PathVariable("docId") int docId, @PathVariable("solrDocId") String solrDocId);
 
-    @GetMapping("/queryByMetadata")
+    @GetMapping("/postgresql/queryByMetadata")
     List<Doc> queryDocByMetadata(@RequestParam("authorName") String authorName, @RequestParam("date") String date, @RequestParam("title")String title);
 
-    @GetMapping("/queryBySolrDocId")
+    @GetMapping("/postgresql/queryBySolrDocId")
     List<Doc> queryDocBySolrDocId(@RequestParam List<String> objectIds);
+
+    @DeleteMapping("/postgresql/deleteFile")
+    int deleteFile(@RequestParam String objectId);
 
 }

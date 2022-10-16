@@ -2,6 +2,7 @@ package com.yang.web;
 
 
 import com.yang.service.AuthorService;
+import com.yang.service.DocumentService;
 import com.yang.service.MetadataService;
 import com.yang.service.SolrIdService;
 import io.swagger.annotations.ApiParam;
@@ -30,7 +31,14 @@ public class PostgresqlController {
     private MetadataService metadataService;
     @Autowired
     private SolrIdService solrIdService;
+    @Autowired
+    private DocumentService documentService;
 
+    /**
+     * just for test
+     * @param id: test
+     * @return test
+     */
     @GetMapping("/test/{id}")
     public String test(@PathVariable("id") String id){
         System.out.println(id);
@@ -39,7 +47,7 @@ public class PostgresqlController {
 
     /**
      * Get the author by name
-     * @param name
+     * @param name: name of the author
      * @return author
      */
     @GetMapping("/author/{name}")
@@ -51,20 +59,21 @@ public class PostgresqlController {
 
     /**
      * create the doc in the db use metadata
-     * @param metadata
+     * @param metadata: metadata of the document
      * @return docid
      */
     @PostMapping("/createDoc/{path}/{objectId}")
     public int createDoc(@RequestBody Metadata metadata, @PathVariable("path") String path, @PathVariable("objectId") String objectId){
-        System.out.println("create: metadata " + metadata + "path: " + path + "objectId: " + objectId);
-        return metadataService.createDoc(metadata, path, objectId);
+        String actualPath = path.replaceAll("@","/");
+        System.out.println("create: metadata " + metadata + "path: " + actualPath + "objectId: " + objectId);
+        return metadataService.createDoc(metadata, actualPath, objectId);
     }
 
     /**
      * update the solrdocId to the db
-     * @param docId
-     * @param solrDocId
-     * @return
+     * @param docId: the id of the document
+     * @param solrDocId: id of the solr doc
+     * @return status
      */
     @GetMapping("/updateSolrDocId/{docId}/{solrDocId}")
     public int updateSolrDocId(@PathVariable("docId") int docId, @PathVariable("solrDocId") String solrDocId){
@@ -74,10 +83,10 @@ public class PostgresqlController {
 
     /**
      * queryDocByMetadata
-     * @param authorName
-     * @param date
-     * @param title
-     * @return
+     * @param authorName: name of the author
+     * @param date: date of the document
+     * @param title: title of the document
+     * @return a list of docs
      */
     @GetMapping("/queryByMetadata")
     public List<Doc> queryDocByMetadata(@RequestParam("authorName") String authorName, @RequestParam("date") String date, @RequestParam("title")String title){
@@ -86,12 +95,28 @@ public class PostgresqlController {
     }
 
     /**
-     * queryDocBySolrDocId(objectId)
+     * query by solr doc Id
+     * @param objectIds: ObjectId
+     * @return result
      */
     @GetMapping("/queryBySolrDocId")
     public List<Doc> queryDocBySolrDocId(@RequestParam List<String> objectIds){
-        System.out.println(objectIds.toArray().toString());
+        for(String objectId:objectIds){
+            System.out.println("query by solr doc Id: " + objectId);
+        }
+//        System.out.println(objectIds.toArray().toString());
         return metadataService.queryDocBySolrDocId(objectIds);
+    }
+
+    /**
+     * delete the file by objectId
+     * @param objectId
+     * @return
+     */
+    @DeleteMapping("/deleteFile")
+    public int deleteFile(@RequestParam String objectId){
+        return documentService.deleteFile(objectId);
+
     }
 
 }

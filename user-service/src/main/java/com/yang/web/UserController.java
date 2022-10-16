@@ -62,15 +62,16 @@ public class UserController {
         /**
          * create the metadata of the file to db
          */
+
         System.out.println("metadata:" + metadata);
-        int docId = databaseClient.createDocToDB(metadata, filePath, objectId);
+        String filepathForUrl = filePath.replaceAll("/", "@");
+        System.out.println("filepathForURL" + filepathForUrl);
+        int docId = databaseClient.createDocToDB(metadata, filepathForUrl, objectId);
 
         /**
          * indexing the doc
          */
-
-        String solrDocId = "xxx";
-        searchEngineClient.indexing(filePath, objectId);
+        String solrDocId = searchEngineClient.indexing(filepathForUrl, objectId);
 
         /**
          * update solr doc ID
@@ -78,7 +79,7 @@ public class UserController {
         System.out.println("docId: " + docId + "solrdocId: " + solrDocId);
         int status = databaseClient.updateSolrDocId(docId, solrDocId);
 
-        return "OK";
+        return "status: " + status;
     }
 
     /**
@@ -91,31 +92,64 @@ public class UserController {
      */
     @GetMapping("/search/{keywords}")
     public List<Doc> searchDoc(@RequestParam("authorname") String authorname, @RequestParam("date") String date, @RequestParam("title") String title, @PathVariable("keywords") String keywords){
-        System.out.println("search---> authorname: " + authorname + "date" + date + "title" + title + "keywords: " + keywords);
+        System.out.println("search---> authorname: " + authorname + "date: " + date + "title: " + title + "keywords: " + keywords);
         List<Doc> docs = new ArrayList<>();
+        System.out.println("queryDocByMetadata--->start");
         /**
          * query db for metadata
          */
         List<Doc> docFromDB = databaseClient.queryDocByMetadata(authorname, date, title);
         docs.addAll(docFromDB);
+        System.out.println("docs from db" + docs);
         /**
          * query searching engine for keywords
          */
+        System.out.println("querySolr--->start");
         List<String> docIdsFromSE = searchEngineClient.querySolr(keywords);
         /**
          * query the doc details from database using the solrdocId
          */
-        docs.addAll(databaseClient.queryDocBySolrDocId(docIdsFromSE));
+        List<Integer> docIdFromDb = new ArrayList<>();
+        for(Doc docdb: docs){
+            docIdFromDb.add(docdb.docId);
+        }
+        List<Doc> docBySolrDocId = databaseClient.queryDocBySolrDocId(docIdsFromSE);
+        for(Doc doc: docBySolrDocId){
+            System.out.println("querydocbysolrdocid: " + doc);
+            if(doc != null){
+                if(!docIdFromDb.contains(doc.docId)){
+                    System.out.println("adddocId: " + doc.docId);
+                    docs.add(doc);
+                }
+            }
+
+        }
+//        docs.addAll(databaseClient.queryDocBySolrDocId(docIdsFromSE));
+        System.out.println("search results--->" + docs);
 
         return docs;
     }
 
     /**
      * Get the file that the user clicks
-     * @param path
+     * example: objectId=1111.txt
      */
     @GetMapping("/getFile")
-    public void getFile(@RequestParam("path") String path, @RequestParam("objectId") String objectId, HttpServletResponse response) throws IOException {
-        userService.getFile(path, objectId, response);
+    public void getFile(@RequestParam("objectId") String objectId, HttpServletResponse response) throws IOException {
+        userService.getFile(objectId, response);
+    }
+
+    /**
+     * delete the file that the user needed
+     * @param objectId
+     * @return
+     */
+    @DeleteMapping("/deleteFile")
+    public String deleteFile(@RequestParam("objectId") String objectId){
+        if(databaseClient.deleteFile(objectId) == 1) {
+            return "success";
+        } else{
+            return "fail";
+        }
     }
 }

@@ -9,6 +9,7 @@ import pojo.Doc;
 import java.util.List;
 
 /**
+ * call the database service
  * @author YHR
  * @date 2022/8/14 44:22:54
  * @description
@@ -16,9 +17,9 @@ import java.util.List;
 @FeignClient("searchEngine-service")
 public interface SearchEngineClient {
 
-    @GetMapping("/index/{path}/{objectId}")
+    @GetMapping("/solr/index/{path}/{objectId}")
     String indexing(@PathVariable("path") String path, @PathVariable("objectId") String objectId);
 
-    @GetMapping("/query/{keywords}")
+    @GetMapping("/solr/query/{keywords}")
     List<String> querySolr(@PathVariable("keywords") String keywords);
 }
