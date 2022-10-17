@@ -11,6 +11,7 @@ import org.checkerframework.checker.units.qual.A;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 import pojo.Doc;
+import pojo.SolrMetadata;
 
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -42,7 +43,7 @@ public class SolrController {
      * @return
      */
     @GetMapping("/query/{keywords}")
-    public List<String> querySolr(@PathVariable("keywords") String keywords){
+    public List<SolrMetadata> querySolr(@PathVariable("keywords") String keywords){
        return docService.querySolr(keywords);
     }
 

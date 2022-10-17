@@ -3,12 +3,15 @@ package com.yang.web;
 import com.yang.client.DatabaseClient;
 import com.yang.client.SearchEngineClient;
 import com.yang.service.UserService;
+import org.checkerframework.checker.units.qual.C;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
+import pojo.CompleteDoc;
 import pojo.Doc;
 import pojo.Metadata;
+import pojo.SolrMetadata;
 
 import javax.servlet.ServletOutputStream;
 import javax.servlet.http.HttpServletResponse;
@@ -91,7 +94,7 @@ public class UserController {
      * @return
      */
     @GetMapping("/search/{keywords}")
-    public List<Doc> searchDoc(@RequestParam("authorname") String authorname, @RequestParam("date") String date, @RequestParam("title") String title, @RequestParam(value = "addData", required = false) String addData, @PathVariable("keywords") String keywords){
+    public List<CompleteDoc> searchDoc(@RequestParam("authorname") String authorname, @RequestParam("date") String date, @RequestParam("title") String title, @RequestParam(value = "addData", required = false) String addData, @PathVariable("keywords") String keywords){
         System.out.println("search---> authorname: " + authorname + "date: " + date + "title: " + title + "addData: " + addData + "keywords: " + keywords);
         List<Doc> docs = new ArrayList<>();
         System.out.println("queryDocByMetadata--->start");
@@ -99,35 +102,83 @@ public class UserController {
          * query db for metadata
          */
         List<Doc> docFromDB = databaseClient.queryDocByMetadata(authorname, date, title, addData);
-        docs.addAll(docFromDB);
-        System.out.println("docs from db" + docs);
+//        docs.addAll(docFromDB);
+        System.out.println("docs from db" + docFromDB);
         /**
          * query searching engine for keywords
          */
         System.out.println("querySolr--->start");
-        List<String> docIdsFromSE = searchEngineClient.querySolr(keywords);
+        List<SolrMetadata> docsFromSE = searchEngineClient.querySolr(keywords);
+        System.out.println("docs from se:" + docsFromSE);
         /**
          * query the doc details from database using the solrdocId
          */
-        List<Integer> docIdFromDb = new ArrayList<>();
-        for(Doc docdb: docs){
-            docIdFromDb.add(docdb.docId);
-        }
-        List<Doc> docBySolrDocId = databaseClient.queryDocBySolrDocId(docIdsFromSE);
-        for(Doc doc: docBySolrDocId){
-            System.out.println("querydocbysolrdocid: " + doc);
-            if(doc != null){
-                if(!docIdFromDb.contains(doc.docId)){
-                    System.out.println("adddocId: " + doc.docId);
-                    docs.add(doc);
+//        List<Integer> docIdFromDb = new ArrayList<>();
+//        for(Doc docdb: docs){
+//            docIdFromDb.add(docdb.docId);
+//        }
+//        List<String> docIdsFromSE = new ArrayList<>();
+        List<CompleteDoc> result = new ArrayList<>();
+        for(Doc doc: docFromDB){
+            for(SolrMetadata solrMetadata: docsFromSE){
+                if((doc.ObjectId + "indexed").equals(solrMetadata.getSolrId())){
+                    CompleteDoc cd = new CompleteDoc();
+                    cd.setDocId(doc.docId);
+                    cd.setDate(doc.date);
+                    cd.setFilename(doc.filename);
+                    cd.setIsdeleted(doc.isdeleted);
+                    cd.setMntpath(doc.mntpath);
+                    cd.setObjectId(doc.ObjectId);
+                    cd.setPublication_json(doc.publication_json);
+                    cd.setSize(doc.size);
+                    cd.setTitle(doc.title);
+                    cd.setName(doc.name);
+                    cd.setType(doc.type);
+                    cd.setAbstra(solrMetadata.getAbstra());
+                    cd.setKeywords(solrMetadata.getKeywords());
+                    result.add(cd);
                 }
             }
 
-        }
-//        docs.addAll(databaseClient.queryDocBySolrDocId(docIdsFromSE));
-        System.out.println("search results--->" + docs);
 
-        return docs;
+        }
+
+
+        //---------------------------------------------
+//        for(SolrMetadata metadata:docsFromSE){
+//            docIdsFromSE.add(metadata.getSolrId());
+//        }
+//        List<Doc> docBySolrDocId = databaseClient.queryDocBySolrDocId(docIdsFromSE);
+//
+//        for(Doc doc: docBySolrDocId){
+//            System.out.println("querydocbysolrdocid: " + doc);
+//            if(doc != null){
+//                if(!docIdFromDb.contains(doc.docId)){
+//                    CompleteDoc cd = new CompleteDoc();
+//                    cd.setDocId(doc.docId);
+//                    cd.setDate(doc.date);
+//                    cd.setFilename(doc.filename);
+//                    cd.setIsdeleted(doc.isdeleted);
+//                    cd.setMntpath(doc.mntpath);
+//                    cd.setObjectId(doc.ObjectId);
+//                    cd.setPublication_json(doc.publication_json);
+//                    cd.setSize(doc.size);
+//                    cd.setTitle(doc.title);
+//                    cd.setName(doc.name);
+//                    cd.setType(doc.type);
+//
+//
+//                    result.add();
+//                    System.out.println("adddocId: " + doc.docId);
+//                    docs.add(doc);
+//                }
+//            }
+//
+//        }
+//        docs.addAll(databaseClient.queryDocBySolrDocId(docIdsFromSE));
+        System.out.println("search results--->" + result);
+
+        return result;
     }
 
     /**

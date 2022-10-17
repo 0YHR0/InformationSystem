@@ -1,37 +1,37 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: searchengineservice
+  name: userservice
   namespace: dev
 spec:
   replicas: 2
   selector:
     matchLabels:
-      run: searchengineservice
+      run: userservice
   template:
     metadata:
       labels:
-        run: searchengineservice
+        run: userservice
     spec:
       containers:
-        - image: 0yhr0/searchengine-service:1.1.0
-          name: searchengineservice
+        - image: 0yhr0/user-service:1.2.0
+          name: userservice
           ports:
-            - containerPort: 8083
+            - containerPort: 8080
               protocol: TCP
 ---
 kind: Service
 apiVersion: v1
 metadata:
-  name: searchengineservice
+  name: userservice
   namespace: dev
 spec:
   selector:
-    run: searchengineservice
+    run: userservice
   type: NodePort
   sessionAffinity: ClientIP
   ports: # 端口信息
     - protocol: TCP
-      port: 8083  # service端口
-      targetPort: 8083 # pod端口
-      nodePort: 31001 # 主机端口
+      port: 8080  # service端口
+      targetPort: 8080 # pod端口
+      nodePort: 31002 # 主机端口

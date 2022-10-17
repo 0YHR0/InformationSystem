@@ -91,7 +91,11 @@ public class PostgresqlController {
     @GetMapping("/queryByMetadata")
     public List<Doc> queryDocByMetadata(@RequestParam("authorName") String authorName, @RequestParam("date") String date, @RequestParam("title")String title, @RequestParam("addData")String addData){
         System.out.println("query by authorname: " + authorName);
-        return metadataService.queryDocByMetadata(authorName, date, title, addData);
+        List<Doc> result = metadataService.queryDocByMetadata(authorName, date, title, addData);
+        for(Doc doc:result){
+            System.out.println("query by metadata result: " + doc);
+        }
+        return result;
     }
 
     /**
@@ -104,8 +108,12 @@ public class PostgresqlController {
         for(String objectId:objectIds){
             System.out.println("query by solr doc Id: " + objectId);
         }
+        List<Doc> result = metadataService.queryDocBySolrDocId(objectIds);
+        for(Doc doc:result){
+            System.out.println("query by solrid result: " + doc);
+        }
 //        System.out.println(objectIds.toArray().toString());
-        return metadataService.queryDocBySolrDocId(objectIds);
+        return result;
     }
 
     /**

@@ -5,6 +5,7 @@ import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import pojo.Doc;
+import pojo.SolrMetadata;
 
 import java.util.List;
 
@@ -21,5 +22,5 @@ public interface SearchEngineClient {
     String indexing(@PathVariable("path") String path, @PathVariable("objectId") String objectId);
 
     @GetMapping("/solr/query/{keywords}")
-    List<String> querySolr(@PathVariable("keywords") String keywords);
+    List<SolrMetadata> querySolr(@PathVariable("keywords") String keywords);
 }
