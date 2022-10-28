@@ -6,7 +6,7 @@ spring:
       server-addr: 129.69.209.197:30008
       discovery:
         cluster-name: Stuttgart # 集群名称
-        namespace: haoran
+#        namespace: haoran
   application:
     name: searchEngine-service  #服务名称
   data:

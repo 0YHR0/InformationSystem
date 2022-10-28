@@ -54,10 +54,10 @@ public class UserService {
         if(file.isEmpty()) {
             return "You upload an empty file";
         }
-        //file.getSize()文件大小判断可用
+        //file.getSize()
         String objectId = file.getOriginalFilename();
         String suffixName = objectId.substring(objectId.lastIndexOf("."));
-        //文件上传后的路径
+        //file upload path
         objectId= UUID.randomUUID()+ suffixName;
         InputStream inputStream = null;
         OutputStream outputStream = null;
@@ -67,15 +67,15 @@ public class UserService {
             Nfs3File nfsFile = new Nfs3File(nfs3, "/" + objectId);
             try {
             inputStream = new BufferedInputStream(new FileInputStream(fileTemp));
-            //打开一个远程Nfs文件输出流，将文件复制到的目的地
+            //open a a remote Nfs file output stream，copy the file to the destination
             outputStream = new BufferedOutputStream(new NfsFileOutputStream(nfsFile));
 
-            //缓冲内存
+            //cache the memory
             byte[] buffer = new byte[1024];
             while ((inputStream.read(buffer)) != -1) {
                 outputStream.write(buffer);
             }
-            System.out.println("文件上传完成！");
+            System.out.println("File upload finish！");
         } catch (Exception ex) {
             ex.printStackTrace();
         } finally {
@@ -118,19 +118,17 @@ public class UserService {
         File fileTemp = null;
         try {
             Nfs3 nfs3 = new Nfs3(NFS_IP, NFS_DIR, new CredentialUnix(0, 0, null), 3);
-            //创建远程服务器上Nfs文件对象
+            //create nfs upload project
             Nfs3File nfsFile = new Nfs3File(nfs3, "/" + objectId);
             fileTemp = File.createTempFile(objectId.substring(0, objectId.length() - 4), objectId.substring(objectId.length() - 4));
 
 //            String localFileName = localDir + nfsFile.getName();
-            //创建一个本地文件对象
+
 //            File localFile = new File(localFileName);
-            //打开一个文件输入流
             inputStream = new BufferedInputStream(new NfsFileInputStream(nfsFile));
-            //打开一个远程Nfs文件输出流，将文件复制到的目的地
             outputStream = new BufferedOutputStream(new FileOutputStream(fileTemp));
 
-            //缓冲内存
+
             byte[] buffer = new byte[1024];
 
             while (inputStream.read(buffer) != -1) {

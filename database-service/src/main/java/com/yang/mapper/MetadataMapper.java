@@ -63,7 +63,7 @@ public interface MetadataMapper {
      * @return a list of documents
      */
     @Select("select distinct a.name, p.title, p.date, d.filename,d.size, d.type, n.mntpath, d.objectid, d.docid, d.isdeleted, p.publication_json::jsonb from author a, publication p, document d, nfsserver n\n" +
-            "where a.pubid =p.pubid and p.pubid =d.pubid and a.name =#{authorName} and p.title =#{title} and p.date=#{date} and d.nfsid= n.nfsid and d.isdeleted=false")
+            "where a.pubid =p.pubid and p.pubid =d.pubid and a.name like #{authorName} and p.title like #{title} and p.date like #{date} and d.nfsid = n.nfsid and d.isdeleted =false")
     List<Doc> queryDocByMetadata(@Param("authorName") String authorName, @Param("date")String date, @Param("title")String title);
 
     /**

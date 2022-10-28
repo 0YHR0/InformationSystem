@@ -195,7 +195,7 @@ public class UserController {
      * @param objectId
      * @return
      */
-    @DeleteMapping("/deleteFile")
+    @GetMapping("/deleteFile")
     public String deleteFile(@RequestParam("objectId") String objectId){
         if(databaseClient.deleteFile(objectId) == 1) {
             return "success";

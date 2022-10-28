@@ -5,10 +5,10 @@ spring:
     nacos:
       server-addr: 129.69.209.197:30008
       discovery:
-        cluster-name: Stuttgart # 集群名称
+        cluster-name: Stuttgart
 #        namespace: haoran
   application:
-    name: searchEngine-service  #服务名称
+    name: searchEngine-service
   data:
     solr:
       host: http://129.69.209.197:30002/solr/testcore

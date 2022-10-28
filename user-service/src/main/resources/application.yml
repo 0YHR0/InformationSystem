@@ -5,11 +5,11 @@ spring:
     nacos:
       server-addr: 129.69.209.197:30008
       discovery:
-        cluster-name: Stuttgart # 集群名称
+        cluster-name: Stuttgart
 #        namespace: haoran
 #        namespace: cbb4f63f-cb92-441f-930d-dc97f1a93238
   application:
-    name: user-service  #服务名称
+    name: user-service
 #  datasource:
 #    url: jdbc:mysql://localhost:3306/cloud_order?useSSL=false
 #    username: root

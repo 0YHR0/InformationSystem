@@ -14,7 +14,7 @@ spec:
         run: userservice
     spec:
       containers:
-        - image: 0yhr0/user-service:1.2.0
+        - image: 0yhr0/user-service:1.2.2
           name: userservice
           ports:
             - containerPort: 8080
@@ -30,8 +30,8 @@ spec:
     run: userservice
   type: NodePort
   sessionAffinity: ClientIP
-  ports: # 端口信息
+  ports:
     - protocol: TCP
-      port: 8080  # service端口
-      targetPort: 8080 # pod端口
-      nodePort: 31002 # 主机端口
+      port: 8080
+      targetPort: 8080
+      nodePort: 31002

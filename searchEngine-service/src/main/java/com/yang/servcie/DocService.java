@@ -192,46 +192,47 @@ public class DocService {
             Nfs3File nfsFile = new Nfs3File(nfs3, "/" + objectId);
             inputStream = new BufferedInputStream(new NfsFileInputStream(nfsFile));
             byte[] out = IOUtils.toByteArray(inputStream);
-
+            String ftype = objectId.split("\\.")[1];
+            String server = solrHost + solrCommand + "&literal.id=" + objectId;
             //byte[] data = new byte[inputStream.available()];
             //inputStream.read(data);
+            if (ftype.equals("pdf")){
+                File tempFile = File.createTempFile(objectId.split("\\.")[0], objectId.split("\\.")[1], null);
+                FileOutputStream fos = new FileOutputStream(tempFile);
+                fos.write(out);
 
-            File tempFile = File.createTempFile(objectId.split("\\.")[0], objectId.split("\\.")[1], null);
-            FileOutputStream fos = new FileOutputStream(tempFile);
-            fos.write(out);
+                FileInputStream fstream = new FileInputStream(tempFile);
+                BodyContentHandler contenthandler = new BodyContentHandler(any);
+                // Create an object of type Metadata to use
+                Metadata data = new Metadata();
+                // Create a context parser for the pdf document
+                ParseContext context = new ParseContext();
+                // PDF document can be parsed using the PDFparser
+                // class
+                PDFParser pdfparser = new PDFParser();
+                // Method parse invoked on PDFParser class
+                pdfparser.parse(fstream, contenthandler, data, context);
 
-            FileInputStream fstream = new FileInputStream(tempFile);
-            BodyContentHandler contenthandler = new BodyContentHandler(any);
-            // Create an object of type Metadata to use
-            Metadata data = new Metadata();
-            // Create a context parser for the pdf document
-            ParseContext context = new ParseContext();
-            // PDF document can be parsed using the PDFparser
-            // class
-            PDFParser pdfparser = new PDFParser();
-            // Method parse invoked on PDFParser class
-            pdfparser.parse(fstream, contenthandler, data, context);
-
-            // Printing the contents of the pdf document
-            // using toString() method in java
-            String content = contenthandler.toString();
-            if(content.indexOf("Index Terms") != -1){
-                Abstract = content.substring(content.indexOf("Abstract") + 9, content.indexOf("Index Terms") - 1);
-                kwords = content.substring(content.indexOf("Index Terms") + 12, content.indexOf("INTRODUCTION") - 7);
-                //System.out.println(kwords);
+                // Printing the contents of the pdf document
+                // using toString() method in java
+                String content = contenthandler.toString();
+                if(content.indexOf("Index Terms") != -1){
+                    Abstract = content.substring(content.indexOf("Abstract") + 9, content.indexOf("Index Terms") - 1);
+                    kwords = content.substring(content.indexOf("Index Terms") + 12, content.indexOf("INTRODUCTION") - 7);
+                    //System.out.println(kwords);
+                }
+                if(content.indexOf("Keywords") != -1){
+                    Abstract = content.substring(content.indexOf("Abstract") + 10, content.indexOf("Keywords") - 1);
+                    kwords = content.substring(content.indexOf("Keywords") + 10, content.indexOf("INTRODUCTION") - 7);
+                    //System.out.println(kwords);
+                }
+                server = server + "&literal.abstract=" + null + "&literal.keywords=" + null;
             }
-            if(content.indexOf("Keywords") != -1){
-                Abstract = content.substring(content.indexOf("Abstract") + 10, content.indexOf("Keywords") - 1);
-                kwords = content.substring(content.indexOf("Keywords") + 10, content.indexOf("INTRODUCTION") - 7);
-                //System.out.println(kwords);
-            }
-
             //System.out.println("Extracting contents :" + content.substring(content.indexOf("Abstract") + 9, content.indexOf("Index Terms") - 1));
-            String ftype = objectId.split("\\.")[1];
+
             //System.out.println(ftype);
             //String server = "http://129.69.209.197:30002/solr/testcore/update/extract?commitWithin=1000&overwrite=true&wt=json&literal.id=" + objectId;
-            String server = solrHost + solrCommand + "&literal.id=" + objectId + "&literal.abstract=" + null + "&literal.keywords=" + null;
-            //System.out.println(server);
+            System.out.println(server);
             URL url = new URL(server);
             HttpURLConnection http = (HttpURLConnection)url.openConnection();
             http.setRequestMethod("POST");
@@ -251,22 +252,23 @@ public class DocService {
             System.out.println(http.getResponseCode() + " " + http.getResponseMessage());
             int c = http.getResponseCode();
             http.disconnect();
-
-            ((HttpSolrClient) solrClient).setParser(new XMLResponseParser());
-            //UpdateRequest updateRequest = new UpdateRequest();
-            //updateRequest.setAction( UpdateRequest.ACTION.COMMIT, false, false);
-            SolrInputDocument document = new SolrInputDocument();
-            document.addField("id", objectId);
-            HashMap<String, String> valueA = new HashMap<String, String>();
-            valueA.put("set", Abstract);
-            document.addField("abstract", valueA);
-            HashMap<String, String> valueK = new HashMap<String, String>();
-            valueK.put("set", kwords);
-            document.addField("keywords", valueK);
-            //updateRequest.add(document);
-            //UpdateResponse rsp = updateRequest.process(solrClient);
-            solrClient.add(document);
-            solrClient.commit();
+            if(ftype.equals("pdf")){
+                ((HttpSolrClient) solrClient).setParser(new XMLResponseParser());
+                //UpdateRequest updateRequest = new UpdateRequest();
+                //updateRequest.setAction( UpdateRequest.ACTION.COMMIT, false, false);
+                SolrInputDocument document = new SolrInputDocument();
+                document.addField("id", objectId);
+                HashMap<String, String> valueA = new HashMap<String, String>();
+                valueA.put("set", Abstract);
+                document.addField("abstract", valueA);
+                HashMap<String, String> valueK = new HashMap<String, String>();
+                valueK.put("set", kwords);
+                document.addField("keywords", valueK);
+                //updateRequest.add(document);
+                //UpdateResponse rsp = updateRequest.process(solrClient);
+                solrClient.add(document);
+                solrClient.commit();
+            }
             if(c == 200){
                 rMsg = objectId + "indexed";
             }
@@ -278,6 +280,7 @@ public class DocService {
         //QueryResponse rsp = solrClient.query(new SolrQuery("id:" + objectId));
         return rMsg;
     }
+
 
 
 }
