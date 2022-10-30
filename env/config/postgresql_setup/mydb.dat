@@ -1,0 +1,5442 @@
+--
+-- PostgreSQL database cluster dump
+--
+
+-- Started on 2022-10-30 16:26:51
+
+SET default_transaction_read_only = off;
+
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+
+--
+-- Roles
+--
+
+CREATE ROLE admin;
+ALTER ROLE admin WITH NOSUPERUSER INHERIT NOCREATEROLE CREATEDB NOLOGIN NOREPLICATION NOBYPASSRLS;
+CREATE ROLE cron_admin;
+ALTER ROLE cron_admin WITH NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB NOLOGIN NOREPLICATION NOBYPASSRLS;
+CREATE ROLE postgres;
+ALTER ROLE postgres WITH SUPERUSER INHERIT CREATEROLE CREATEDB LOGIN REPLICATION BYPASSRLS PASSWORD 'md5bf0e917cce2b0d211072b635988b6470';
+CREATE ROLE robot_zmon;
+ALTER ROLE robot_zmon WITH NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB NOLOGIN NOREPLICATION NOBYPASSRLS;
+CREATE ROLE standby;
+ALTER ROLE standby WITH NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB LOGIN REPLICATION NOBYPASSRLS PASSWORD 'md5944dc934b9722fd37b17ddc49edeb9b3';
+CREATE ROLE zalandos;
+ALTER ROLE zalandos WITH NOSUPERUSER INHERIT NOCREATEROLE NOCREATEDB NOLOGIN NOREPLICATION NOBYPASSRLS;
+
+
+--
+-- Role memberships
+--
+
+GRANT cron_admin TO admin GRANTED BY postgres;
+
+
+
+
+--
+-- Databases
+--
+
+--
+-- Database "template1" dump
+--
+
+\connect template1
+
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 14.2 (Ubuntu 14.2-1.pgdg18.04+1)
+-- Dumped by pg_dump version 14.3
+
+-- Started on 2022-10-30 16:26:51
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 10 (class 2615 OID 16662)
+-- Name: metric_helpers; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+CREATE SCHEMA metric_helpers;
+
+
+ALTER SCHEMA metric_helpers OWNER TO postgres;
+
+--
+-- TOC entry 8 (class 2615 OID 16607)
+-- Name: user_management; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+CREATE SCHEMA user_management;
+
+
+ALTER SCHEMA user_management OWNER TO postgres;
+
+--
+-- TOC entry 2 (class 3079 OID 16617)
+-- Name: pg_stat_statements; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA public;
+
+
+--
+-- TOC entry 3312 (class 0 OID 0)
+-- Dependencies: 2
+-- Name: EXTENSION pg_stat_statements; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_stat_statements IS 'track planning and execution statistics of all SQL statements executed';
+
+
+--
+-- TOC entry 3 (class 3079 OID 16642)
+-- Name: pg_stat_kcache; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_stat_kcache WITH SCHEMA public;
+
+
+--
+-- TOC entry 3313 (class 0 OID 0)
+-- Dependencies: 3
+-- Name: EXTENSION pg_stat_kcache; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_stat_kcache IS 'Kernel statistics gathering';
+
+
+--
+-- TOC entry 4 (class 3079 OID 16655)
+-- Name: set_user; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS set_user WITH SCHEMA public;
+
+
+--
+-- TOC entry 3314 (class 0 OID 0)
+-- Dependencies: 4
+-- Name: EXTENSION set_user; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION set_user IS 'similar to SET ROLE but with added logging';
+
+
+--
+-- TOC entry 253 (class 1255 OID 16668)
+-- Name: get_btree_bloat_approx(); Type: FUNCTION; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) RETURNS SETOF record
+    LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT current_database(), nspname AS schemaname, tblname, idxname, bs*(relpages)::bigint AS real_size,
+  bs*(relpages-est_pages)::bigint AS extra_size,
+  100 * (relpages-est_pages)::float / relpages AS extra_ratio,
+  fillfactor,
+  CASE WHEN relpages > est_pages_ff
+    THEN bs*(relpages-est_pages_ff)
+    ELSE 0
+  END AS bloat_size,
+  100 * (relpages-est_pages_ff)::float / relpages AS bloat_ratio,
+  is_na
+  -- , 100-(pst).avg_leaf_density AS pst_avg_bloat, est_pages, index_tuple_hdr_bm, maxalign, pagehdr, nulldatawidth, nulldatahdrwidth, reltuples, relpages -- (DEBUG INFO)
+FROM (
+  SELECT coalesce(1 +
+         ceil(reltuples/floor((bs-pageopqdata-pagehdr)/(4+nulldatahdrwidth)::float)), 0 -- ItemIdData size + computed avg size of a tuple (nulldatahdrwidth)
+      ) AS est_pages,
+      coalesce(1 +
+         ceil(reltuples/floor((bs-pageopqdata-pagehdr)*fillfactor/(100*(4+nulldatahdrwidth)::float))), 0
+      ) AS est_pages_ff,
+      bs, nspname, tblname, idxname, relpages, fillfactor, is_na
+      -- , pgstatindex(idxoid) AS pst, index_tuple_hdr_bm, maxalign, pagehdr, nulldatawidth, nulldatahdrwidth, reltuples -- (DEBUG INFO)
+  FROM (
+      SELECT maxalign, bs, nspname, tblname, idxname, reltuples, relpages, idxoid, fillfactor,
+            ( index_tuple_hdr_bm +
+                maxalign - CASE -- Add padding to the index tuple header to align on MAXALIGN
+                  WHEN index_tuple_hdr_bm%maxalign = 0 THEN maxalign
+                  ELSE index_tuple_hdr_bm%maxalign
+                END
+              + nulldatawidth + maxalign - CASE -- Add padding to the data to align on MAXALIGN
+                  WHEN nulldatawidth = 0 THEN 0
+                  WHEN nulldatawidth::integer%maxalign = 0 THEN maxalign
+                  ELSE nulldatawidth::integer%maxalign
+                END
+            )::numeric AS nulldatahdrwidth, pagehdr, pageopqdata, is_na
+            -- , index_tuple_hdr_bm, nulldatawidth -- (DEBUG INFO)
+      FROM (
+          SELECT n.nspname, ct.relname AS tblname, i.idxname, i.reltuples, i.relpages,
+              i.idxoid, i.fillfactor, current_setting('block_size')::numeric AS bs,
+              CASE -- MAXALIGN: 4 on 32bits, 8 on 64bits (and mingw32 ?)
+                WHEN version() ~ 'mingw32' OR version() ~ '64-bit|x86_64|ppc64|ia64|amd64' THEN 8
+                ELSE 4
+              END AS maxalign,
+              /* per page header, fixed size: 20 for 7.X, 24 for others */
+              24 AS pagehdr,
+              /* per page btree opaque data */
+              16 AS pageopqdata,
+              /* per tuple header: add IndexAttributeBitMapData if some cols are null-able */
+              CASE WHEN max(coalesce(s.stanullfrac,0)) = 0
+                  THEN 2 -- IndexTupleData size
+                  ELSE 2 + (( 32 + 8 - 1 ) / 8) -- IndexTupleData size + IndexAttributeBitMapData size ( max num filed per index + 8 - 1 /8)
+              END AS index_tuple_hdr_bm,
+              /* data len: we remove null values save space using it fractionnal part from stats */
+              sum( (1-coalesce(s.stanullfrac, 0)) * coalesce(s.stawidth, 1024)) AS nulldatawidth,
+              max( CASE WHEN a.atttypid = 'pg_catalog.name'::regtype THEN 1 ELSE 0 END ) > 0 AS is_na
+          FROM (
+              SELECT idxname, reltuples, relpages, tbloid, idxoid, fillfactor,
+                  CASE WHEN indkey[i]=0 THEN idxoid ELSE tbloid END AS att_rel,
+                  CASE WHEN indkey[i]=0 THEN i ELSE indkey[i] END AS att_pos
+              FROM (
+                  SELECT idxname, reltuples, relpages, tbloid, idxoid, fillfactor, indkey, generate_series(1,indnatts) AS i
+                  FROM (
+                      SELECT ci.relname AS idxname, ci.reltuples, ci.relpages, i.indrelid AS tbloid,
+                          i.indexrelid AS idxoid,
+                          coalesce(substring(
+                              array_to_string(ci.reloptions, ' ')
+                              from 'fillfactor=([0-9]+)')::smallint, 90) AS fillfactor,
+                          i.indnatts,
+                          string_to_array(textin(int2vectorout(i.indkey)),' ')::int[] AS indkey
+                      FROM pg_index i
+                      JOIN pg_class ci ON ci.oid=i.indexrelid
+                      WHERE ci.relam=(SELECT oid FROM pg_am WHERE amname = 'btree')
+                        AND ci.relpages > 0
+                  ) AS idx_data
+              ) AS idx_data_cross
+          ) i
+          JOIN pg_attribute a ON a.attrelid = i.att_rel
+                             AND a.attnum = i.att_pos
+          JOIN pg_statistic s ON s.starelid = i.att_rel
+                             AND s.staattnum = i.att_pos
+          JOIN pg_class ct ON ct.oid = i.tbloid
+          JOIN pg_namespace n ON ct.relnamespace = n.oid
+          GROUP BY 1,2,3,4,5,6,7,8,9,10
+      ) AS rows_data_stats
+  ) AS rows_hdr_pdg_stats
+) AS relation_stats;
+$$;
+
+
+ALTER FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) OWNER TO postgres;
+
+--
+-- TOC entry 255 (class 1255 OID 16663)
+-- Name: get_table_bloat_approx(); Type: FUNCTION; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) RETURNS SETOF record
+    LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT
+  current_database(),
+  schemaname,
+  tblname,
+  (bs*tblpages) AS real_size,
+  ((tblpages-est_tblpages)*bs) AS extra_size,
+  CASE WHEN tblpages - est_tblpages > 0
+    THEN 100 * (tblpages - est_tblpages)/tblpages::float
+    ELSE 0
+  END AS extra_ratio,
+  fillfactor,
+  CASE WHEN tblpages - est_tblpages_ff > 0
+    THEN (tblpages-est_tblpages_ff)*bs
+    ELSE 0
+  END AS bloat_size,
+  CASE WHEN tblpages - est_tblpages_ff > 0
+    THEN 100 * (tblpages - est_tblpages_ff)/tblpages::float
+    ELSE 0
+  END AS bloat_ratio,
+  is_na
+FROM (
+  SELECT ceil( reltuples / ( (bs-page_hdr)/tpl_size ) ) + ceil( toasttuples / 4 ) AS est_tblpages,
+    ceil( reltuples / ( (bs-page_hdr)*fillfactor/(tpl_size*100) ) ) + ceil( toasttuples / 4 ) AS est_tblpages_ff,
+    tblpages, fillfactor, bs, tblid, schemaname, tblname, heappages, toastpages, is_na
+    -- , tpl_hdr_size, tpl_data_size, pgstattuple(tblid) AS pst -- (DEBUG INFO)
+  FROM (
+    SELECT
+      ( 4 + tpl_hdr_size + tpl_data_size + (2*ma)
+        - CASE WHEN tpl_hdr_size%ma = 0 THEN ma ELSE tpl_hdr_size%ma END
+        - CASE WHEN ceil(tpl_data_size)::int%ma = 0 THEN ma ELSE ceil(tpl_data_size)::int%ma END
+      ) AS tpl_size, bs - page_hdr AS size_per_block, (heappages + toastpages) AS tblpages, heappages,
+      toastpages, reltuples, toasttuples, bs, page_hdr, tblid, schemaname, tblname, fillfactor, is_na
+      -- , tpl_hdr_size, tpl_data_size
+    FROM (
+      SELECT
+        tbl.oid AS tblid, ns.nspname AS schemaname, tbl.relname AS tblname, tbl.reltuples,
+        tbl.relpages AS heappages, coalesce(toast.relpages, 0) AS toastpages,
+        coalesce(toast.reltuples, 0) AS toasttuples,
+        coalesce(substring(
+          array_to_string(tbl.reloptions, ' ')
+          FROM 'fillfactor=([0-9]+)')::smallint, 100) AS fillfactor,
+        current_setting('block_size')::numeric AS bs,
+        CASE WHEN version()~'mingw32' OR version()~'64-bit|x86_64|ppc64|ia64|amd64' THEN 8 ELSE 4 END AS ma,
+        24 AS page_hdr,
+        23 + CASE WHEN MAX(coalesce(s.null_frac,0)) > 0 THEN ( 7 + count(s.attname) ) / 8 ELSE 0::int END
+           + CASE WHEN bool_or(att.attname = 'oid' and att.attnum < 0) THEN 4 ELSE 0 END AS tpl_hdr_size,
+        sum( (1-coalesce(s.null_frac, 0)) * coalesce(s.avg_width, 0) ) AS tpl_data_size,
+        bool_or(att.atttypid = 'pg_catalog.name'::regtype)
+          OR sum(CASE WHEN att.attnum > 0 THEN 1 ELSE 0 END) <> count(s.attname) AS is_na
+      FROM pg_attribute AS att
+        JOIN pg_class AS tbl ON att.attrelid = tbl.oid
+        JOIN pg_namespace AS ns ON ns.oid = tbl.relnamespace
+        LEFT JOIN pg_stats AS s ON s.schemaname=ns.nspname
+          AND s.tablename = tbl.relname AND s.inherited=false AND s.attname=att.attname
+        LEFT JOIN pg_class AS toast ON tbl.reltoastrelid = toast.oid
+      WHERE NOT att.attisdropped
+        AND tbl.relkind = 'r'
+      GROUP BY 1,2,3,4,5,6,7,8,9,10
+      ORDER BY 2,3
+    ) AS s
+  ) AS s2
+) AS s3 WHERE schemaname NOT LIKE 'information_schema';
+$$;
+
+
+ALTER FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) OWNER TO postgres;
+
+--
+-- TOC entry 254 (class 1255 OID 16677)
+-- Name: pg_stat_statements(boolean); Type: FUNCTION; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE FUNCTION metric_helpers.pg_stat_statements(showtext boolean) RETURNS SETOF public.pg_stat_statements
+    LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER
+    AS $$
+  SELECT * FROM public.pg_stat_statements(showtext);
+$$;
+
+
+ALTER FUNCTION metric_helpers.pg_stat_statements(showtext boolean) OWNER TO postgres;
+
+--
+-- TOC entry 249 (class 1255 OID 16609)
+-- Name: create_application_user(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_application_user(username text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+DECLARE
+    pw text;
+BEGIN
+    SELECT user_management.random_password(20) INTO pw;
+    EXECUTE format($$ CREATE USER %I WITH PASSWORD %L $$, username, pw);
+    RETURN pw;
+END
+$_$;
+
+
+ALTER FUNCTION user_management.create_application_user(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3321 (class 0 OID 0)
+-- Dependencies: 249
+-- Name: FUNCTION create_application_user(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_application_user(username text) IS 'Creates a user that can login, sets the password to a strong random one,
+which is then returned';
+
+
+--
+-- TOC entry 237 (class 1255 OID 16612)
+-- Name: create_application_user_or_change_password(text, text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_application_user_or_change_password(username text, password text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    PERFORM 1 FROM pg_roles WHERE rolname = username;
+
+    IF FOUND
+    THEN
+        EXECUTE format($$ ALTER ROLE %I WITH PASSWORD %L $$, username, password);
+    ELSE
+        EXECUTE format($$ CREATE USER %I WITH PASSWORD %L $$, username, password);
+    END IF;
+END
+$_$;
+
+
+ALTER FUNCTION user_management.create_application_user_or_change_password(username text, password text) OWNER TO postgres;
+
+--
+-- TOC entry 3323 (class 0 OID 0)
+-- Dependencies: 237
+-- Name: FUNCTION create_application_user_or_change_password(username text, password text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_application_user_or_change_password(username text, password text) IS 'USE THIS ONLY IN EMERGENCY!  The password will appear in the DB logs.
+Creates a user that can login, sets the password to the one provided.
+If the user already exists, sets its password.';
+
+
+--
+-- TOC entry 250 (class 1255 OID 16611)
+-- Name: create_role(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_role(rolename text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    -- set ADMIN to the admin user, so every member of admin can GRANT these roles to each other
+    EXECUTE format($$ CREATE ROLE %I WITH ADMIN admin $$, rolename);
+END;
+$_$;
+
+
+ALTER FUNCTION user_management.create_role(rolename text) OWNER TO postgres;
+
+--
+-- TOC entry 3325 (class 0 OID 0)
+-- Dependencies: 250
+-- Name: FUNCTION create_role(rolename text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_role(rolename text) IS 'Creates a role that cannot log in, but can be used to set up fine-grained privileges';
+
+
+--
+-- TOC entry 251 (class 1255 OID 16610)
+-- Name: create_user(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_user(username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    EXECUTE format($$ CREATE USER %I IN ROLE zalandos, admin $$, username);
+    EXECUTE format($$ ALTER ROLE %I SET log_statement TO 'all' $$, username);
+END;
+$_$;
+
+
+ALTER FUNCTION user_management.create_user(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3327 (class 0 OID 0)
+-- Dependencies: 251
+-- Name: FUNCTION create_user(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_user(username text) IS 'Creates a user that is supposed to be a human, to be authenticated without a password';
+
+
+--
+-- TOC entry 227 (class 1255 OID 16615)
+-- Name: drop_role(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.drop_role(username text) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT user_management.drop_user(username);
+$$;
+
+
+ALTER FUNCTION user_management.drop_role(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3329 (class 0 OID 0)
+-- Dependencies: 227
+-- Name: FUNCTION drop_role(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.drop_role(username text) IS 'Drop a human or application user.  Intended for cleanup (either after team changes or mistakes in role setup).
+Roles (= users) that own database objects cannot be dropped.';
+
+
+--
+-- TOC entry 226 (class 1255 OID 16614)
+-- Name: drop_user(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.drop_user(username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    EXECUTE format($$ DROP ROLE %I $$, username);
+END
+$_$;
+
+
+ALTER FUNCTION user_management.drop_user(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3331 (class 0 OID 0)
+-- Dependencies: 226
+-- Name: FUNCTION drop_user(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.drop_user(username text) IS 'Drop a human or application user.  Intended for cleanup (either after team changes or mistakes in role setup).
+Roles (= users) that own database objects cannot be dropped.';
+
+
+--
+-- TOC entry 248 (class 1255 OID 16608)
+-- Name: random_password(integer); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.random_password(length integer) RETURNS text
+    LANGUAGE sql
+    SET search_path TO 'pg_catalog'
+    AS $$
+WITH chars (c) AS (
+    SELECT chr(33)
+    UNION ALL
+    SELECT chr(i) FROM generate_series (35, 38) AS t (i)
+    UNION ALL
+    SELECT chr(i) FROM generate_series (42, 90) AS t (i)
+    UNION ALL
+    SELECT chr(i) FROM generate_series (97, 122) AS t (i)
+),
+bricks (b) AS (
+    -- build a pool of chars (the size will be the number of chars above times length)
+    -- and shuffle it
+    SELECT c FROM chars, generate_series(1, length) ORDER BY random()
+)
+SELECT substr(string_agg(b, ''), 1, length) FROM bricks;
+$$;
+
+
+ALTER FUNCTION user_management.random_password(length integer) OWNER TO postgres;
+
+--
+-- TOC entry 222 (class 1255 OID 16613)
+-- Name: revoke_admin(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.revoke_admin(username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    EXECUTE format($$ REVOKE admin FROM %I $$, username);
+END
+$_$;
+
+
+ALTER FUNCTION user_management.revoke_admin(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3333 (class 0 OID 0)
+-- Dependencies: 222
+-- Name: FUNCTION revoke_admin(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.revoke_admin(username text) IS 'Use this function to make a human user less privileged,
+ie. when you want to grant someone read privileges only';
+
+
+--
+-- TOC entry 228 (class 1255 OID 16616)
+-- Name: terminate_backend(integer); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.terminate_backend(pid integer) RETURNS boolean
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT pg_terminate_backend(pid);
+$$;
+
+
+ALTER FUNCTION user_management.terminate_backend(pid integer) OWNER TO postgres;
+
+--
+-- TOC entry 3335 (class 0 OID 0)
+-- Dependencies: 228
+-- Name: FUNCTION terminate_backend(pid integer); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.terminate_backend(pid integer) IS 'When there is a process causing harm, you can kill it using this function.  Get the pid from pg_stat_activity
+(be careful to match the user name (usename) and the query, in order not to kill innocent kittens) and pass it to terminate_backend()';
+
+
+--
+-- TOC entry 219 (class 1259 OID 16673)
+-- Name: index_bloat; Type: VIEW; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE VIEW metric_helpers.index_bloat AS
+ SELECT get_btree_bloat_approx.i_database,
+    get_btree_bloat_approx.i_schema_name,
+    get_btree_bloat_approx.i_table_name,
+    get_btree_bloat_approx.i_index_name,
+    get_btree_bloat_approx.i_real_size,
+    get_btree_bloat_approx.i_extra_size,
+    get_btree_bloat_approx.i_extra_ratio,
+    get_btree_bloat_approx.i_fill_factor,
+    get_btree_bloat_approx.i_bloat_size,
+    get_btree_bloat_approx.i_bloat_ratio,
+    get_btree_bloat_approx.i_is_na
+   FROM metric_helpers.get_btree_bloat_approx() get_btree_bloat_approx(i_database, i_schema_name, i_table_name, i_index_name, i_real_size, i_extra_size, i_extra_ratio, i_fill_factor, i_bloat_size, i_bloat_ratio, i_is_na);
+
+
+ALTER TABLE metric_helpers.index_bloat OWNER TO postgres;
+
+--
+-- TOC entry 220 (class 1259 OID 16678)
+-- Name: pg_stat_statements; Type: VIEW; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE VIEW metric_helpers.pg_stat_statements AS
+ SELECT pg_stat_statements.userid,
+    pg_stat_statements.dbid,
+    pg_stat_statements.toplevel,
+    pg_stat_statements.queryid,
+    pg_stat_statements.query,
+    pg_stat_statements.plans,
+    pg_stat_statements.total_plan_time,
+    pg_stat_statements.min_plan_time,
+    pg_stat_statements.max_plan_time,
+    pg_stat_statements.mean_plan_time,
+    pg_stat_statements.stddev_plan_time,
+    pg_stat_statements.calls,
+    pg_stat_statements.total_exec_time,
+    pg_stat_statements.min_exec_time,
+    pg_stat_statements.max_exec_time,
+    pg_stat_statements.mean_exec_time,
+    pg_stat_statements.stddev_exec_time,
+    pg_stat_statements.rows,
+    pg_stat_statements.shared_blks_hit,
+    pg_stat_statements.shared_blks_read,
+    pg_stat_statements.shared_blks_dirtied,
+    pg_stat_statements.shared_blks_written,
+    pg_stat_statements.local_blks_hit,
+    pg_stat_statements.local_blks_read,
+    pg_stat_statements.local_blks_dirtied,
+    pg_stat_statements.local_blks_written,
+    pg_stat_statements.temp_blks_read,
+    pg_stat_statements.temp_blks_written,
+    pg_stat_statements.blk_read_time,
+    pg_stat_statements.blk_write_time,
+    pg_stat_statements.wal_records,
+    pg_stat_statements.wal_fpi,
+    pg_stat_statements.wal_bytes
+   FROM metric_helpers.pg_stat_statements(true) pg_stat_statements(userid, dbid, toplevel, queryid, query, plans, total_plan_time, min_plan_time, max_plan_time, mean_plan_time, stddev_plan_time, calls, total_exec_time, min_exec_time, max_exec_time, mean_exec_time, stddev_exec_time, rows, shared_blks_hit, shared_blks_read, shared_blks_dirtied, shared_blks_written, local_blks_hit, local_blks_read, local_blks_dirtied, local_blks_written, temp_blks_read, temp_blks_written, blk_read_time, blk_write_time, wal_records, wal_fpi, wal_bytes);
+
+
+ALTER TABLE metric_helpers.pg_stat_statements OWNER TO postgres;
+
+--
+-- TOC entry 218 (class 1259 OID 16664)
+-- Name: table_bloat; Type: VIEW; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE VIEW metric_helpers.table_bloat AS
+ SELECT get_table_bloat_approx.t_database,
+    get_table_bloat_approx.t_schema_name,
+    get_table_bloat_approx.t_table_name,
+    get_table_bloat_approx.t_real_size,
+    get_table_bloat_approx.t_extra_size,
+    get_table_bloat_approx.t_extra_ratio,
+    get_table_bloat_approx.t_fill_factor,
+    get_table_bloat_approx.t_bloat_size,
+    get_table_bloat_approx.t_bloat_ratio,
+    get_table_bloat_approx.t_is_na
+   FROM metric_helpers.get_table_bloat_approx() get_table_bloat_approx(t_database, t_schema_name, t_table_name, t_real_size, t_extra_size, t_extra_ratio, t_fill_factor, t_bloat_size, t_bloat_ratio, t_is_na);
+
+
+ALTER TABLE metric_helpers.table_bloat OWNER TO postgres;
+
+--
+-- TOC entry 3310 (class 0 OID 0)
+-- Dependencies: 10
+-- Name: SCHEMA metric_helpers; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA metric_helpers TO admin;
+GRANT USAGE ON SCHEMA metric_helpers TO robot_zmon;
+
+
+--
+-- TOC entry 3311 (class 0 OID 0)
+-- Dependencies: 8
+-- Name: SCHEMA user_management; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA user_management TO admin;
+
+
+--
+-- TOC entry 3315 (class 0 OID 0)
+-- Dependencies: 253
+-- Name: FUNCTION get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean); Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) TO admin;
+GRANT ALL ON FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) TO robot_zmon;
+
+
+--
+-- TOC entry 3316 (class 0 OID 0)
+-- Dependencies: 255
+-- Name: FUNCTION get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean); Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) TO admin;
+GRANT ALL ON FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) TO robot_zmon;
+
+
+--
+-- TOC entry 3317 (class 0 OID 0)
+-- Dependencies: 254
+-- Name: FUNCTION pg_stat_statements(showtext boolean); Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION metric_helpers.pg_stat_statements(showtext boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION metric_helpers.pg_stat_statements(showtext boolean) TO admin;
+GRANT ALL ON FUNCTION metric_helpers.pg_stat_statements(showtext boolean) TO robot_zmon;
+
+
+--
+-- TOC entry 3318 (class 0 OID 0)
+-- Dependencies: 221
+-- Name: FUNCTION pg_switch_wal(); Type: ACL; Schema: pg_catalog; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION pg_catalog.pg_switch_wal() TO admin;
+
+
+--
+-- TOC entry 3319 (class 0 OID 0)
+-- Dependencies: 252
+-- Name: FUNCTION pg_stat_statements_reset(userid oid, dbid oid, queryid bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.pg_stat_statements_reset(userid oid, dbid oid, queryid bigint) TO admin;
+
+
+--
+-- TOC entry 3320 (class 0 OID 0)
+-- Dependencies: 247
+-- Name: FUNCTION set_user(text); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.set_user(text) TO admin;
+
+
+--
+-- TOC entry 3322 (class 0 OID 0)
+-- Dependencies: 249
+-- Name: FUNCTION create_application_user(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_application_user(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_application_user(username text) TO admin;
+
+
+--
+-- TOC entry 3324 (class 0 OID 0)
+-- Dependencies: 237
+-- Name: FUNCTION create_application_user_or_change_password(username text, password text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_application_user_or_change_password(username text, password text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_application_user_or_change_password(username text, password text) TO admin;
+
+
+--
+-- TOC entry 3326 (class 0 OID 0)
+-- Dependencies: 250
+-- Name: FUNCTION create_role(rolename text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_role(rolename text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_role(rolename text) TO admin;
+
+
+--
+-- TOC entry 3328 (class 0 OID 0)
+-- Dependencies: 251
+-- Name: FUNCTION create_user(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_user(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_user(username text) TO admin;
+
+
+--
+-- TOC entry 3330 (class 0 OID 0)
+-- Dependencies: 227
+-- Name: FUNCTION drop_role(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.drop_role(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.drop_role(username text) TO admin;
+
+
+--
+-- TOC entry 3332 (class 0 OID 0)
+-- Dependencies: 226
+-- Name: FUNCTION drop_user(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.drop_user(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.drop_user(username text) TO admin;
+
+
+--
+-- TOC entry 3334 (class 0 OID 0)
+-- Dependencies: 222
+-- Name: FUNCTION revoke_admin(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.revoke_admin(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.revoke_admin(username text) TO admin;
+
+
+--
+-- TOC entry 3336 (class 0 OID 0)
+-- Dependencies: 228
+-- Name: FUNCTION terminate_backend(pid integer); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.terminate_backend(pid integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.terminate_backend(pid integer) TO admin;
+
+
+--
+-- TOC entry 3337 (class 0 OID 0)
+-- Dependencies: 219
+-- Name: TABLE index_bloat; Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+GRANT SELECT ON TABLE metric_helpers.index_bloat TO admin;
+GRANT SELECT ON TABLE metric_helpers.index_bloat TO robot_zmon;
+
+
+--
+-- TOC entry 3338 (class 0 OID 0)
+-- Dependencies: 220
+-- Name: TABLE pg_stat_statements; Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+GRANT SELECT ON TABLE metric_helpers.pg_stat_statements TO admin;
+GRANT SELECT ON TABLE metric_helpers.pg_stat_statements TO robot_zmon;
+
+
+--
+-- TOC entry 3339 (class 0 OID 0)
+-- Dependencies: 218
+-- Name: TABLE table_bloat; Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+GRANT SELECT ON TABLE metric_helpers.table_bloat TO admin;
+GRANT SELECT ON TABLE metric_helpers.table_bloat TO robot_zmon;
+
+
+--
+-- TOC entry 3340 (class 0 OID 0)
+-- Dependencies: 121
+-- Name: TABLE pg_stat_activity; Type: ACL; Schema: pg_catalog; Owner: postgres
+--
+
+GRANT SELECT ON TABLE pg_catalog.pg_stat_activity TO admin;
+
+
+-- Completed on 2022-10-30 16:26:51
+
+--
+-- PostgreSQL database dump complete
+--
+
+--
+-- Database "lib" dump
+--
+
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 14.2 (Ubuntu 14.2-1.pgdg18.04+1)
+-- Dumped by pg_dump version 14.3
+
+-- Started on 2022-10-30 16:26:51
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 3376 (class 1262 OID 16685)
+-- Name: lib; Type: DATABASE; Schema: -; Owner: postgres
+--
+
+CREATE DATABASE lib WITH TEMPLATE = template0 ENCODING = 'UTF8' LOCALE = 'en_US.utf-8';
+
+
+ALTER DATABASE lib OWNER TO postgres;
+
+\connect lib
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 10 (class 2615 OID 16662)
+-- Name: metric_helpers; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+CREATE SCHEMA metric_helpers;
+
+
+ALTER SCHEMA metric_helpers OWNER TO postgres;
+
+--
+-- TOC entry 8 (class 2615 OID 16607)
+-- Name: user_management; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+CREATE SCHEMA user_management;
+
+
+ALTER SCHEMA user_management OWNER TO postgres;
+
+--
+-- TOC entry 2 (class 3079 OID 16617)
+-- Name: pg_stat_statements; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA public;
+
+
+--
+-- TOC entry 3379 (class 0 OID 0)
+-- Dependencies: 2
+-- Name: EXTENSION pg_stat_statements; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_stat_statements IS 'track planning and execution statistics of all SQL statements executed';
+
+
+--
+-- TOC entry 3 (class 3079 OID 16642)
+-- Name: pg_stat_kcache; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_stat_kcache WITH SCHEMA public;
+
+
+--
+-- TOC entry 3380 (class 0 OID 0)
+-- Dependencies: 3
+-- Name: EXTENSION pg_stat_kcache; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_stat_kcache IS 'Kernel statistics gathering';
+
+
+--
+-- TOC entry 4 (class 3079 OID 16655)
+-- Name: set_user; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS set_user WITH SCHEMA public;
+
+
+--
+-- TOC entry 3381 (class 0 OID 0)
+-- Dependencies: 4
+-- Name: EXTENSION set_user; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION set_user IS 'similar to SET ROLE but with added logging';
+
+
+--
+-- TOC entry 269 (class 1255 OID 16668)
+-- Name: get_btree_bloat_approx(); Type: FUNCTION; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) RETURNS SETOF record
+    LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT current_database(), nspname AS schemaname, tblname, idxname, bs*(relpages)::bigint AS real_size,
+  bs*(relpages-est_pages)::bigint AS extra_size,
+  100 * (relpages-est_pages)::float / relpages AS extra_ratio,
+  fillfactor,
+  CASE WHEN relpages > est_pages_ff
+    THEN bs*(relpages-est_pages_ff)
+    ELSE 0
+  END AS bloat_size,
+  100 * (relpages-est_pages_ff)::float / relpages AS bloat_ratio,
+  is_na
+  -- , 100-(pst).avg_leaf_density AS pst_avg_bloat, est_pages, index_tuple_hdr_bm, maxalign, pagehdr, nulldatawidth, nulldatahdrwidth, reltuples, relpages -- (DEBUG INFO)
+FROM (
+  SELECT coalesce(1 +
+         ceil(reltuples/floor((bs-pageopqdata-pagehdr)/(4+nulldatahdrwidth)::float)), 0 -- ItemIdData size + computed avg size of a tuple (nulldatahdrwidth)
+      ) AS est_pages,
+      coalesce(1 +
+         ceil(reltuples/floor((bs-pageopqdata-pagehdr)*fillfactor/(100*(4+nulldatahdrwidth)::float))), 0
+      ) AS est_pages_ff,
+      bs, nspname, tblname, idxname, relpages, fillfactor, is_na
+      -- , pgstatindex(idxoid) AS pst, index_tuple_hdr_bm, maxalign, pagehdr, nulldatawidth, nulldatahdrwidth, reltuples -- (DEBUG INFO)
+  FROM (
+      SELECT maxalign, bs, nspname, tblname, idxname, reltuples, relpages, idxoid, fillfactor,
+            ( index_tuple_hdr_bm +
+                maxalign - CASE -- Add padding to the index tuple header to align on MAXALIGN
+                  WHEN index_tuple_hdr_bm%maxalign = 0 THEN maxalign
+                  ELSE index_tuple_hdr_bm%maxalign
+                END
+              + nulldatawidth + maxalign - CASE -- Add padding to the data to align on MAXALIGN
+                  WHEN nulldatawidth = 0 THEN 0
+                  WHEN nulldatawidth::integer%maxalign = 0 THEN maxalign
+                  ELSE nulldatawidth::integer%maxalign
+                END
+            )::numeric AS nulldatahdrwidth, pagehdr, pageopqdata, is_na
+            -- , index_tuple_hdr_bm, nulldatawidth -- (DEBUG INFO)
+      FROM (
+          SELECT n.nspname, ct.relname AS tblname, i.idxname, i.reltuples, i.relpages,
+              i.idxoid, i.fillfactor, current_setting('block_size')::numeric AS bs,
+              CASE -- MAXALIGN: 4 on 32bits, 8 on 64bits (and mingw32 ?)
+                WHEN version() ~ 'mingw32' OR version() ~ '64-bit|x86_64|ppc64|ia64|amd64' THEN 8
+                ELSE 4
+              END AS maxalign,
+              /* per page header, fixed size: 20 for 7.X, 24 for others */
+              24 AS pagehdr,
+              /* per page btree opaque data */
+              16 AS pageopqdata,
+              /* per tuple header: add IndexAttributeBitMapData if some cols are null-able */
+              CASE WHEN max(coalesce(s.stanullfrac,0)) = 0
+                  THEN 2 -- IndexTupleData size
+                  ELSE 2 + (( 32 + 8 - 1 ) / 8) -- IndexTupleData size + IndexAttributeBitMapData size ( max num filed per index + 8 - 1 /8)
+              END AS index_tuple_hdr_bm,
+              /* data len: we remove null values save space using it fractionnal part from stats */
+              sum( (1-coalesce(s.stanullfrac, 0)) * coalesce(s.stawidth, 1024)) AS nulldatawidth,
+              max( CASE WHEN a.atttypid = 'pg_catalog.name'::regtype THEN 1 ELSE 0 END ) > 0 AS is_na
+          FROM (
+              SELECT idxname, reltuples, relpages, tbloid, idxoid, fillfactor,
+                  CASE WHEN indkey[i]=0 THEN idxoid ELSE tbloid END AS att_rel,
+                  CASE WHEN indkey[i]=0 THEN i ELSE indkey[i] END AS att_pos
+              FROM (
+                  SELECT idxname, reltuples, relpages, tbloid, idxoid, fillfactor, indkey, generate_series(1,indnatts) AS i
+                  FROM (
+                      SELECT ci.relname AS idxname, ci.reltuples, ci.relpages, i.indrelid AS tbloid,
+                          i.indexrelid AS idxoid,
+                          coalesce(substring(
+                              array_to_string(ci.reloptions, ' ')
+                              from 'fillfactor=([0-9]+)')::smallint, 90) AS fillfactor,
+                          i.indnatts,
+                          string_to_array(textin(int2vectorout(i.indkey)),' ')::int[] AS indkey
+                      FROM pg_index i
+                      JOIN pg_class ci ON ci.oid=i.indexrelid
+                      WHERE ci.relam=(SELECT oid FROM pg_am WHERE amname = 'btree')
+                        AND ci.relpages > 0
+                  ) AS idx_data
+              ) AS idx_data_cross
+          ) i
+          JOIN pg_attribute a ON a.attrelid = i.att_rel
+                             AND a.attnum = i.att_pos
+          JOIN pg_statistic s ON s.starelid = i.att_rel
+                             AND s.staattnum = i.att_pos
+          JOIN pg_class ct ON ct.oid = i.tbloid
+          JOIN pg_namespace n ON ct.relnamespace = n.oid
+          GROUP BY 1,2,3,4,5,6,7,8,9,10
+      ) AS rows_data_stats
+  ) AS rows_hdr_pdg_stats
+) AS relation_stats;
+$$;
+
+
+ALTER FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) OWNER TO postgres;
+
+--
+-- TOC entry 271 (class 1255 OID 16663)
+-- Name: get_table_bloat_approx(); Type: FUNCTION; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) RETURNS SETOF record
+    LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT
+  current_database(),
+  schemaname,
+  tblname,
+  (bs*tblpages) AS real_size,
+  ((tblpages-est_tblpages)*bs) AS extra_size,
+  CASE WHEN tblpages - est_tblpages > 0
+    THEN 100 * (tblpages - est_tblpages)/tblpages::float
+    ELSE 0
+  END AS extra_ratio,
+  fillfactor,
+  CASE WHEN tblpages - est_tblpages_ff > 0
+    THEN (tblpages-est_tblpages_ff)*bs
+    ELSE 0
+  END AS bloat_size,
+  CASE WHEN tblpages - est_tblpages_ff > 0
+    THEN 100 * (tblpages - est_tblpages_ff)/tblpages::float
+    ELSE 0
+  END AS bloat_ratio,
+  is_na
+FROM (
+  SELECT ceil( reltuples / ( (bs-page_hdr)/tpl_size ) ) + ceil( toasttuples / 4 ) AS est_tblpages,
+    ceil( reltuples / ( (bs-page_hdr)*fillfactor/(tpl_size*100) ) ) + ceil( toasttuples / 4 ) AS est_tblpages_ff,
+    tblpages, fillfactor, bs, tblid, schemaname, tblname, heappages, toastpages, is_na
+    -- , tpl_hdr_size, tpl_data_size, pgstattuple(tblid) AS pst -- (DEBUG INFO)
+  FROM (
+    SELECT
+      ( 4 + tpl_hdr_size + tpl_data_size + (2*ma)
+        - CASE WHEN tpl_hdr_size%ma = 0 THEN ma ELSE tpl_hdr_size%ma END
+        - CASE WHEN ceil(tpl_data_size)::int%ma = 0 THEN ma ELSE ceil(tpl_data_size)::int%ma END
+      ) AS tpl_size, bs - page_hdr AS size_per_block, (heappages + toastpages) AS tblpages, heappages,
+      toastpages, reltuples, toasttuples, bs, page_hdr, tblid, schemaname, tblname, fillfactor, is_na
+      -- , tpl_hdr_size, tpl_data_size
+    FROM (
+      SELECT
+        tbl.oid AS tblid, ns.nspname AS schemaname, tbl.relname AS tblname, tbl.reltuples,
+        tbl.relpages AS heappages, coalesce(toast.relpages, 0) AS toastpages,
+        coalesce(toast.reltuples, 0) AS toasttuples,
+        coalesce(substring(
+          array_to_string(tbl.reloptions, ' ')
+          FROM 'fillfactor=([0-9]+)')::smallint, 100) AS fillfactor,
+        current_setting('block_size')::numeric AS bs,
+        CASE WHEN version()~'mingw32' OR version()~'64-bit|x86_64|ppc64|ia64|amd64' THEN 8 ELSE 4 END AS ma,
+        24 AS page_hdr,
+        23 + CASE WHEN MAX(coalesce(s.null_frac,0)) > 0 THEN ( 7 + count(s.attname) ) / 8 ELSE 0::int END
+           + CASE WHEN bool_or(att.attname = 'oid' and att.attnum < 0) THEN 4 ELSE 0 END AS tpl_hdr_size,
+        sum( (1-coalesce(s.null_frac, 0)) * coalesce(s.avg_width, 0) ) AS tpl_data_size,
+        bool_or(att.atttypid = 'pg_catalog.name'::regtype)
+          OR sum(CASE WHEN att.attnum > 0 THEN 1 ELSE 0 END) <> count(s.attname) AS is_na
+      FROM pg_attribute AS att
+        JOIN pg_class AS tbl ON att.attrelid = tbl.oid
+        JOIN pg_namespace AS ns ON ns.oid = tbl.relnamespace
+        LEFT JOIN pg_stats AS s ON s.schemaname=ns.nspname
+          AND s.tablename = tbl.relname AND s.inherited=false AND s.attname=att.attname
+        LEFT JOIN pg_class AS toast ON tbl.reltoastrelid = toast.oid
+      WHERE NOT att.attisdropped
+        AND tbl.relkind = 'r'
+      GROUP BY 1,2,3,4,5,6,7,8,9,10
+      ORDER BY 2,3
+    ) AS s
+  ) AS s2
+) AS s3 WHERE schemaname NOT LIKE 'information_schema';
+$$;
+
+
+ALTER FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) OWNER TO postgres;
+
+--
+-- TOC entry 270 (class 1255 OID 16677)
+-- Name: pg_stat_statements(boolean); Type: FUNCTION; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE FUNCTION metric_helpers.pg_stat_statements(showtext boolean) RETURNS SETOF public.pg_stat_statements
+    LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER
+    AS $$
+  SELECT * FROM public.pg_stat_statements(showtext);
+$$;
+
+
+ALTER FUNCTION metric_helpers.pg_stat_statements(showtext boolean) OWNER TO postgres;
+
+--
+-- TOC entry 265 (class 1255 OID 16609)
+-- Name: create_application_user(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_application_user(username text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+DECLARE
+    pw text;
+BEGIN
+    SELECT user_management.random_password(20) INTO pw;
+    EXECUTE format($$ CREATE USER %I WITH PASSWORD %L $$, username, pw);
+    RETURN pw;
+END
+$_$;
+
+
+ALTER FUNCTION user_management.create_application_user(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3388 (class 0 OID 0)
+-- Dependencies: 265
+-- Name: FUNCTION create_application_user(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_application_user(username text) IS 'Creates a user that can login, sets the password to a strong random one,
+which is then returned';
+
+
+--
+-- TOC entry 253 (class 1255 OID 16612)
+-- Name: create_application_user_or_change_password(text, text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_application_user_or_change_password(username text, password text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    PERFORM 1 FROM pg_roles WHERE rolname = username;
+
+    IF FOUND
+    THEN
+        EXECUTE format($$ ALTER ROLE %I WITH PASSWORD %L $$, username, password);
+    ELSE
+        EXECUTE format($$ CREATE USER %I WITH PASSWORD %L $$, username, password);
+    END IF;
+END
+$_$;
+
+
+ALTER FUNCTION user_management.create_application_user_or_change_password(username text, password text) OWNER TO postgres;
+
+--
+-- TOC entry 3390 (class 0 OID 0)
+-- Dependencies: 253
+-- Name: FUNCTION create_application_user_or_change_password(username text, password text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_application_user_or_change_password(username text, password text) IS 'USE THIS ONLY IN EMERGENCY!  The password will appear in the DB logs.
+Creates a user that can login, sets the password to the one provided.
+If the user already exists, sets its password.';
+
+
+--
+-- TOC entry 266 (class 1255 OID 16611)
+-- Name: create_role(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_role(rolename text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    -- set ADMIN to the admin user, so every member of admin can GRANT these roles to each other
+    EXECUTE format($$ CREATE ROLE %I WITH ADMIN admin $$, rolename);
+END;
+$_$;
+
+
+ALTER FUNCTION user_management.create_role(rolename text) OWNER TO postgres;
+
+--
+-- TOC entry 3392 (class 0 OID 0)
+-- Dependencies: 266
+-- Name: FUNCTION create_role(rolename text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_role(rolename text) IS 'Creates a role that cannot log in, but can be used to set up fine-grained privileges';
+
+
+--
+-- TOC entry 267 (class 1255 OID 16610)
+-- Name: create_user(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_user(username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    EXECUTE format($$ CREATE USER %I IN ROLE zalandos, admin $$, username);
+    EXECUTE format($$ ALTER ROLE %I SET log_statement TO 'all' $$, username);
+END;
+$_$;
+
+
+ALTER FUNCTION user_management.create_user(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3394 (class 0 OID 0)
+-- Dependencies: 267
+-- Name: FUNCTION create_user(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_user(username text) IS 'Creates a user that is supposed to be a human, to be authenticated without a password';
+
+
+--
+-- TOC entry 243 (class 1255 OID 16615)
+-- Name: drop_role(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.drop_role(username text) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT user_management.drop_user(username);
+$$;
+
+
+ALTER FUNCTION user_management.drop_role(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3396 (class 0 OID 0)
+-- Dependencies: 243
+-- Name: FUNCTION drop_role(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.drop_role(username text) IS 'Drop a human or application user.  Intended for cleanup (either after team changes or mistakes in role setup).
+Roles (= users) that own database objects cannot be dropped.';
+
+
+--
+-- TOC entry 242 (class 1255 OID 16614)
+-- Name: drop_user(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.drop_user(username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    EXECUTE format($$ DROP ROLE %I $$, username);
+END
+$_$;
+
+
+ALTER FUNCTION user_management.drop_user(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3398 (class 0 OID 0)
+-- Dependencies: 242
+-- Name: FUNCTION drop_user(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.drop_user(username text) IS 'Drop a human or application user.  Intended for cleanup (either after team changes or mistakes in role setup).
+Roles (= users) that own database objects cannot be dropped.';
+
+
+--
+-- TOC entry 264 (class 1255 OID 16608)
+-- Name: random_password(integer); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.random_password(length integer) RETURNS text
+    LANGUAGE sql
+    SET search_path TO 'pg_catalog'
+    AS $$
+WITH chars (c) AS (
+    SELECT chr(33)
+    UNION ALL
+    SELECT chr(i) FROM generate_series (35, 38) AS t (i)
+    UNION ALL
+    SELECT chr(i) FROM generate_series (42, 90) AS t (i)
+    UNION ALL
+    SELECT chr(i) FROM generate_series (97, 122) AS t (i)
+),
+bricks (b) AS (
+    -- build a pool of chars (the size will be the number of chars above times length)
+    -- and shuffle it
+    SELECT c FROM chars, generate_series(1, length) ORDER BY random()
+)
+SELECT substr(string_agg(b, ''), 1, length) FROM bricks;
+$$;
+
+
+ALTER FUNCTION user_management.random_password(length integer) OWNER TO postgres;
+
+--
+-- TOC entry 238 (class 1255 OID 16613)
+-- Name: revoke_admin(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.revoke_admin(username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    EXECUTE format($$ REVOKE admin FROM %I $$, username);
+END
+$_$;
+
+
+ALTER FUNCTION user_management.revoke_admin(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3400 (class 0 OID 0)
+-- Dependencies: 238
+-- Name: FUNCTION revoke_admin(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.revoke_admin(username text) IS 'Use this function to make a human user less privileged,
+ie. when you want to grant someone read privileges only';
+
+
+--
+-- TOC entry 244 (class 1255 OID 16616)
+-- Name: terminate_backend(integer); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.terminate_backend(pid integer) RETURNS boolean
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT pg_terminate_backend(pid);
+$$;
+
+
+ALTER FUNCTION user_management.terminate_backend(pid integer) OWNER TO postgres;
+
+--
+-- TOC entry 3402 (class 0 OID 0)
+-- Dependencies: 244
+-- Name: FUNCTION terminate_backend(pid integer); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.terminate_backend(pid integer) IS 'When there is a process causing harm, you can kill it using this function.  Get the pid from pg_stat_activity
+(be careful to match the user name (usename) and the query, in order not to kill innocent kittens) and pass it to terminate_backend()';
+
+
+--
+-- TOC entry 219 (class 1259 OID 16673)
+-- Name: index_bloat; Type: VIEW; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE VIEW metric_helpers.index_bloat AS
+ SELECT get_btree_bloat_approx.i_database,
+    get_btree_bloat_approx.i_schema_name,
+    get_btree_bloat_approx.i_table_name,
+    get_btree_bloat_approx.i_index_name,
+    get_btree_bloat_approx.i_real_size,
+    get_btree_bloat_approx.i_extra_size,
+    get_btree_bloat_approx.i_extra_ratio,
+    get_btree_bloat_approx.i_fill_factor,
+    get_btree_bloat_approx.i_bloat_size,
+    get_btree_bloat_approx.i_bloat_ratio,
+    get_btree_bloat_approx.i_is_na
+   FROM metric_helpers.get_btree_bloat_approx() get_btree_bloat_approx(i_database, i_schema_name, i_table_name, i_index_name, i_real_size, i_extra_size, i_extra_ratio, i_fill_factor, i_bloat_size, i_bloat_ratio, i_is_na);
+
+
+ALTER TABLE metric_helpers.index_bloat OWNER TO postgres;
+
+--
+-- TOC entry 220 (class 1259 OID 16678)
+-- Name: pg_stat_statements; Type: VIEW; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE VIEW metric_helpers.pg_stat_statements AS
+ SELECT pg_stat_statements.userid,
+    pg_stat_statements.dbid,
+    pg_stat_statements.toplevel,
+    pg_stat_statements.queryid,
+    pg_stat_statements.query,
+    pg_stat_statements.plans,
+    pg_stat_statements.total_plan_time,
+    pg_stat_statements.min_plan_time,
+    pg_stat_statements.max_plan_time,
+    pg_stat_statements.mean_plan_time,
+    pg_stat_statements.stddev_plan_time,
+    pg_stat_statements.calls,
+    pg_stat_statements.total_exec_time,
+    pg_stat_statements.min_exec_time,
+    pg_stat_statements.max_exec_time,
+    pg_stat_statements.mean_exec_time,
+    pg_stat_statements.stddev_exec_time,
+    pg_stat_statements.rows,
+    pg_stat_statements.shared_blks_hit,
+    pg_stat_statements.shared_blks_read,
+    pg_stat_statements.shared_blks_dirtied,
+    pg_stat_statements.shared_blks_written,
+    pg_stat_statements.local_blks_hit,
+    pg_stat_statements.local_blks_read,
+    pg_stat_statements.local_blks_dirtied,
+    pg_stat_statements.local_blks_written,
+    pg_stat_statements.temp_blks_read,
+    pg_stat_statements.temp_blks_written,
+    pg_stat_statements.blk_read_time,
+    pg_stat_statements.blk_write_time,
+    pg_stat_statements.wal_records,
+    pg_stat_statements.wal_fpi,
+    pg_stat_statements.wal_bytes
+   FROM metric_helpers.pg_stat_statements(true) pg_stat_statements(userid, dbid, toplevel, queryid, query, plans, total_plan_time, min_plan_time, max_plan_time, mean_plan_time, stddev_plan_time, calls, total_exec_time, min_exec_time, max_exec_time, mean_exec_time, stddev_exec_time, rows, shared_blks_hit, shared_blks_read, shared_blks_dirtied, shared_blks_written, local_blks_hit, local_blks_read, local_blks_dirtied, local_blks_written, temp_blks_read, temp_blks_written, blk_read_time, blk_write_time, wal_records, wal_fpi, wal_bytes);
+
+
+ALTER TABLE metric_helpers.pg_stat_statements OWNER TO postgres;
+
+--
+-- TOC entry 218 (class 1259 OID 16664)
+-- Name: table_bloat; Type: VIEW; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE VIEW metric_helpers.table_bloat AS
+ SELECT get_table_bloat_approx.t_database,
+    get_table_bloat_approx.t_schema_name,
+    get_table_bloat_approx.t_table_name,
+    get_table_bloat_approx.t_real_size,
+    get_table_bloat_approx.t_extra_size,
+    get_table_bloat_approx.t_extra_ratio,
+    get_table_bloat_approx.t_fill_factor,
+    get_table_bloat_approx.t_bloat_size,
+    get_table_bloat_approx.t_bloat_ratio,
+    get_table_bloat_approx.t_is_na
+   FROM metric_helpers.get_table_bloat_approx() get_table_bloat_approx(t_database, t_schema_name, t_table_name, t_real_size, t_extra_size, t_extra_ratio, t_fill_factor, t_bloat_size, t_bloat_ratio, t_is_na);
+
+
+ALTER TABLE metric_helpers.table_bloat OWNER TO postgres;
+
+--
+-- TOC entry 226 (class 1259 OID 24681)
+-- Name: seq; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 221 (class 1259 OID 16693)
+-- Name: author; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.author (
+    authorid integer DEFAULT nextval('public.seq'::regclass) NOT NULL,
+    name character varying,
+    pubid integer
+);
+
+
+ALTER TABLE public.author OWNER TO postgres;
+
+--
+-- TOC entry 233 (class 1259 OID 24701)
+-- Name: seq7; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq7
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq7 OWNER TO postgres;
+
+--
+-- TOC entry 224 (class 1259 OID 16714)
+-- Name: document; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.document (
+    docid integer DEFAULT nextval('public.seq7'::regclass) NOT NULL,
+    type character varying,
+    pubid integer,
+    objectid character varying,
+    size character varying,
+    filename character varying,
+    nfsid integer,
+    solrid character varying,
+    isdeleted boolean
+);
+
+
+ALTER TABLE public.document OWNER TO postgres;
+
+--
+-- TOC entry 236 (class 1259 OID 24708)
+-- Name: seqnfs; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seqnfs
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seqnfs OWNER TO postgres;
+
+--
+-- TOC entry 225 (class 1259 OID 16721)
+-- Name: nfsserver; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.nfsserver (
+    nfsid integer DEFAULT nextval('public.seqnfs'::regclass) NOT NULL,
+    mntpath character varying
+);
+
+
+ALTER TABLE public.nfsserver OWNER TO postgres;
+
+--
+-- TOC entry 227 (class 1259 OID 24687)
+-- Name: seq1; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq1
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq1 OWNER TO postgres;
+
+--
+-- TOC entry 222 (class 1259 OID 16700)
+-- Name: organization; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.organization (
+    orgid integer DEFAULT nextval('public.seq1'::regclass) NOT NULL,
+    name character varying,
+    address character varying
+);
+
+
+ALTER TABLE public.organization OWNER TO postgres;
+
+--
+-- TOC entry 228 (class 1259 OID 24688)
+-- Name: seq2; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq2
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq2 OWNER TO postgres;
+
+--
+-- TOC entry 223 (class 1259 OID 16707)
+-- Name: publication; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.publication (
+    pubid integer DEFAULT nextval('public.seq2'::regclass) NOT NULL,
+    orgid integer,
+    title character varying,
+    date character varying,
+    publication_json json
+);
+
+
+ALTER TABLE public.publication OWNER TO postgres;
+
+--
+-- TOC entry 229 (class 1259 OID 24689)
+-- Name: seq3; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq3
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq3 OWNER TO postgres;
+
+--
+-- TOC entry 230 (class 1259 OID 24690)
+-- Name: seq4; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq4
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq4 OWNER TO postgres;
+
+--
+-- TOC entry 231 (class 1259 OID 24696)
+-- Name: seq5; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq5
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq5 OWNER TO postgres;
+
+--
+-- TOC entry 232 (class 1259 OID 24699)
+-- Name: seq6; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq6
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq6 OWNER TO postgres;
+
+--
+-- TOC entry 234 (class 1259 OID 24703)
+-- Name: seq8; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq8
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq8 OWNER TO postgres;
+
+--
+-- TOC entry 235 (class 1259 OID 24705)
+-- Name: seq9; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq9
+    START WITH 5
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq9 OWNER TO postgres;
+
+--
+-- TOC entry 3355 (class 0 OID 16693)
+-- Dependencies: 221
+-- Data for Name: author; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.author (authorid, name, pubid) FROM stdin;
+1	yuxin	1
+2	haoran	2
+3	jingyue	3
+4	soheb	4
+5	lisa	5
+6	jennie	6
+520	yang	5200
+8	string	0
+112	yang112	112
+113	yang113	113
+114	yang114	114
+115	yang115	115
+116	yang116	116
+117	yang117	117
+118	yang118	118
+119	yang119	119
+120	yang120	120
+121	yang121	121
+122	yang122	122
+123	yang123	123
+7	yang	1
+9	yang	1
+10	yang	1
+11	yang	1
+12	yang	1
+13	yang	1
+14	yang	1
+15	yang	1
+16	yang	1
+17	yang	1
+18	yang	1
+19	yang	1
+20	yang	1
+21	yang	1
+22	yang	1
+23	yang	1
+24	yang	1
+25	yang	1
+26	yang	1
+27	yang	1
+28	yang	1
+29	yang	1
+30	yang	1
+31	yang	1
+32	yang	1
+33	yang	1
+34	yang	1
+35	yang	1
+36	yang	1
+37	yang	1
+38	yang	1
+39	yang	1
+40	yang	1
+41	yang	1
+42	yang	1
+43	yang	1
+44	yang	1
+45	yang	1
+46	yang	1
+47	yang	1
+48	yang	1
+49	yang	1
+50	yang	1
+51	yang	1
+52	yang	1
+53	yang	1
+54	yang	1
+55	yang	1
+56	yang	1
+57	yang	1
+58	yang	1
+59	yang	1
+60	yang	1
+61	yang	1
+62	yang	1
+63	yang	1
+64	yang	1
+65	yang	1
+66	yang	1
+67	yang	1
+68	yang	1
+69	yang	1
+70	yang	1
+71	yang	1
+72	yang	1
+73	yang	1
+74	yang	1
+75	yang	1
+76	yang	1
+77	yang	1
+78	yang	1
+79	yang	1
+80	yang	1
+81	yang	1
+82	yang	1
+83	yang	1
+84	yang	1
+85	yang	1
+86	yang	1
+87	yang	1
+88	yang	1
+89	yang	1
+90	yang	1
+91	yang	1
+92	yang	1
+93	yang	1
+94	yang	1
+95	yang	1
+96	yang	1
+97	yang	1
+98	yang	1
+99	yang	1
+100	yang	1
+101	yang	1
+102	yang	1
+103	yang	1
+104	yang	1
+105	yang	1
+106	yang	1
+107	yang	1
+108	yang	1
+109	yang	1
+110	yang	1
+111	yang	1
+124	yang	1
+125	yang	1
+126	yang	1
+127	yang	1
+128	yang	1
+129	yang	1
+130	yang	1
+131	yang	1
+132	yang	1
+133	yang	1
+134	yang	1
+135	yang	1
+136	yang	1
+137	yang	1
+138	a	147
+139	a	148
+140	a	149
+141	a	150
+142	a	151
+143	yang130	152
+144	yang130	153
+145	yang130	154
+146	yang131	155
+147	yang131	156
+148	yang131	157
+149	yang131	158
+150	yang131	159
+151	yang131	160
+152	yang132	161
+153	yang132	162
+154	yang132	163
+155	yang140	164
+156	yang141	165
+157	yang141	166
+158	yang142	167
+159	yang142	168
+160	yang143	169
+161	yang143	170
+162	yang144	171
+163	yang144	172
+164	yang145	173
+165	yang145	174
+166	yang146	175
+167	yang146	176
+168	yang147	177
+169	yang147	178
+170	string	179
+171	aaa	180
+172	aa	181
+173	bb	182
+174	cc	183
+175	yang148	184
+176	cc	185
+177	yang149	186
+178	yang149	187
+179	yang149	188
+180	yang149	189
+181	yang149	190
+182	yang150	191
+183	yang150	192
+184	yang150	193
+185	Trivedi, Pankaj	194
+186	yang150	195
+187	yang150	196
+188	yang151	197
+189	yang152	198
+190	yang152	199
+191	yang152	200
+192	yang152	201
+193	yang152	202
+194	yang152	203
+195	yang152	204
+196	yang160	205
+197	yang160	206
+198	Tharam Dillon 	207
+199	Tharam Dillon 	208
+200	yang160	209
+201	yang160	210
+202	yang160	211
+203	yang161	212
+204	Julian Ziegler	213
+205	Rebecca Eichler	214
+206	em	215
+207	Tharam Dillon	216
+208	Tharam Dillon	217
+209	Tharam Dillon	218
+210	Nathan Shone	219
+211	Nathan Shone	220
+212	Quan Wang	221
+213	Quan Wang	222
+214	Quan Wang	223
+215	Quan Wang	224
+216	Quan Wang	225
+217	Quan Wang	226
+218	Quan Wang	227
+219	Quan Wang	228
+220	Quan Wang	229
+221	Quan Wang	230
+222	Quan Wang	231
+223	Quan Wang	232
+224	Quan Wang	233
+225	Tharam Dillon	234
+226	Quan Wang	235
+227	Nathan Shone	236
+228	Nathan Shone	237
+229	Nathan Shone	238
+230		239
+231	Tharam Dillon	240
+232	Tharam Dillon	241
+233	Tharam Dillon	242
+234	Tharam Dillon	243
+235	Tharam Dillon	244
+\.
+
+
+--
+-- TOC entry 3358 (class 0 OID 16714)
+-- Dependencies: 224
+-- Data for Name: document; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.document (docid, type, pubid, objectid, size, filename, nfsid, solrid, isdeleted) FROM stdin;
+58	.txt	181	aceb94ad-4c1c-4aa3-a1bf-503e60dd6fb5.txt	111	yang147.txt	7	\N	f
+2	pdf	2	2	80k	mypdf2	2	2	\N
+3	pdf	3	3	80k	mypdf3	3	3	\N
+48	yang144	171	e50d4976-4d7b-4559-82a6-eb7f363a3592.txt	yang144	yang144	7	e50d4976-4d7b-4559-82a6-eb7f363a3592.txt,indexed	f
+5	pdf	5	5	80k	mypdf5	5	5	\N
+7	yangfiletype	5200	5f8d523c-6e36-414b-9907-d016bfe7b949.txt	yangfilesize	yangfilename	7	\N	\N
+32	yang131	155	651c0597-09a6-4a6b-b23c-de5368a4043e.txt	yang131	yang131	7	651c0597-09a6-4a6b-b23c-de5368a4043e.txt,indexed	\N
+10	string	0	8	string	string	10	\N	\N
+12	yang112filetype	112	yang112Objectid.txt	yang112filesize	yang112filename	\N	\N	\N
+13	yang113filetype	113	yang113Objectid.txt	yang113filesize	yang113filename	\N	\N	\N
+14	yang114filetype	114	yang114Objectid.txt	yang114filesize	yang114filename	\N	\N	\N
+4	pdf	4	4	80k	mypdf4	10	4	\N
+15	yang115filetype	115	yang115Objectid.txt	yang115filesize	yang115filename	\N	\N	\N
+16	yang116filetype	116	yang116Objectid.txt	yang116filesize	yang116filename	10	\N	\N
+17	yang117filetype	117	yang117Objectid.txt	yang117filesize	yang117filename	10	\N	\N
+18	txt	118	9698c513-2ce8-4a14-8b9f-8941ded9f352.txt	118kb	finaltest	7	\N	\N
+19	txt	119	fedfba67-0ea1-4799-9f0a-04351dad6726.txt	119kb	finaltest119	7	\N	\N
+20	txt	120	1158a74f-9669-427f-b84e-0f41e57a8179.txt	120kb	finaltest120	7	\N	\N
+33	yang131	156	1d1dccd0-de3e-47df-a878-411bb4a7fbdb.txt	yang131	yang131	7	1d1dccd0-de3e-47df-a878-411bb4a7fbdb.txt,indexed	\N
+21	txt	121	b44606ba-3ddd-4cdb-a9c2-f40f0d8e944e.txt	121kb	finaltest121	7	\N	\N
+22	txt	122	2ad6b751-296f-4139-ba33-09f8a38cb4ae.txt	122kb	finaltest122	7	\N	\N
+23	txt	123	f39ffb82-04aa-4fbf-a8ab-a34600855c97.txt	123kb	test1010	7	\N	\N
+34	yang131	157	76c0f507-cc5b-48fd-a9ee-d3e8a33431a7.txt	yang131	yang131	7	76c0f507-cc5b-48fd-a9ee-d3e8a33431a7.txt,indexed	\N
+43	yang141	166	10126ad2-22a5-46a9-8eae-2585d58c8e08.txt	yang141	yang141	7	10126ad2-22a5-46a9-8eae-2585d58c8e08.txt,indexed	\N
+24	a	147	04ffdfaa-38ad-4295-8688-73b9c0fe3719.txt	a	a	7	\N	\N
+35	yang131	158	294a2df2-6a3c-4b2f-8454-21541dcb5481.txt	yang131	yang131	7	294a2df2-6a3c-4b2f-8454-21541dcb5481.txt,indexed	\N
+42	yang141	165	1a1bf71e-b730-48f7-922b-7c88c4271f33.txt	yang141	yang141	7	1a1bf71e-b730-48f7-922b-7c88c4271f33.txt,indexed	t
+36	yang131	159	f263f01f-7361-42d4-9e76-abdf26c4f71e.txt	yang131	yang131	7	f263f01f-7361-42d4-9e76-abdf26c4f71e.txt,indexed	\N
+25	a	148	4a0fd3d3-b119-41a4-9226-e4b6cbd897b1.txt	a	a	7	\N	\N
+26	a	149	10f60182-c7d3-4073-835d-2300d8d4e441.txt	a	a	7	\N	\N
+27	a	150	46cc9e58-f820-4cb0-a466-d64c7fb0b041.txt	a	a	7	\N	\N
+37	yang131	160	40d0a36f-84c7-44bc-b91a-20b993c96cf0.txt	yang131	yang131	7	40d0a36f-84c7-44bc-b91a-20b993c96cf0.txt,indexed	\N
+28	a	151	6f9b644c-5064-4d63-8ced-d94e4e38fbcb.txt	a	a	7	\N	\N
+50	yang145	173	2c8d98b5-2eb5-4f3f-aaa1-2d1eb346c67c.txt	yang145	yang145	7	2c8d98b5-2eb5-4f3f-aaa1-2d1eb346c67c.txt,indexed	t
+44	yang142	167	701e6398-2a58-4546-a9b4-f4378b301c55.txt	yang142	yang142	7	701e6398-2a58-4546-a9b4-f4378b301c55.txt,indexed	\N
+1	pdf	1	1	80k	mypdf1	1	f7c9b192-95a1-43c4-a7ac-f51be984e5d2.txt,indexed	\N
+38	yang132	161	81826113-8cec-4708-9e06-dd4de4609dd4.txt	yang132	yang132	7	81826113-8cec-4708-9e06-dd4de4609dd4.txt,indexed	\N
+31	yang130	154	43bd8b3d-1cc2-45bd-b274-549fe6198311.txt	yang130	yang130	7	43bd8b3d-1cc2-45bd-b274-549fe6198311.txt,indexed	\N
+39	yang132	162	97447fe5-82c7-48b9-a277-82c8417879c8.txt	yang132	yang132	7	97447fe5-82c7-48b9-a277-82c8417879c8.txt,indexed	\N
+45	yang142	168	60cf83ec-0197-4dc9-8648-a6732de3dd99.txt	yang142	yang142	7	60cf83ec-0197-4dc9-8648-a6732de3dd99.txt,indexed	\N
+40	yang132	163	6154bbce-f95e-4aa3-b17a-b99cbd0a66ab.txt	yang132	yang132	7	6154bbce-f95e-4aa3-b17a-b99cbd0a66ab.txt,indexed	\N
+41	yang140	164	4b5f8a9f-a805-445a-b5b6-fe8c888ee55d.txt	yang140	yang140	7	4b5f8a9f-a805-445a-b5b6-fe8c888ee55d.txt,indexed	\N
+49	yang144	172	9abb61a5-5d08-4839-b33a-176c2c018d18.txt	yang144	yang144	7	9abb61a5-5d08-4839-b33a-176c2c018d18.txt,indexed	t
+46	yang143	169	66e1fd16-f7dc-4da7-b4d0-a0e25a6a8dc0.txt	yang143	yang143	7	66e1fd16-f7dc-4da7-b4d0-a0e25a6a8dc0.txt,indexed	\N
+47	yang143	170	dc15fc2e-dda5-493e-851e-f38b7c83184e.txt	yang143	yang143	7	dc15fc2e-dda5-493e-851e-f38b7c83184e.txt,indexed	\N
+54	yang147	177	09cb3765-b481-473f-8a2c-11128af9e205.txt	yang147	yang147	7	09cb3765-b481-473f-8a2c-11128af9e205.txt,indexed	t
+6	pdf	6	6	80k	mypdf6	6	6	t
+51	yang145	174	6547e1c8-0a1c-492b-b360-9d0eed0a2cfd.txt	yang145	yang145	7	6547e1c8-0a1c-492b-b360-9d0eed0a2cfd.txt,indexed	f
+53	yang146	176	ba0f62c9-291a-4ba9-a119-09d3ba036119.txt	yang146	yang146	7	ba0f62c9-291a-4ba9-a119-09d3ba036119.txt,indexed	t
+52	yang146	175	737fa382-2f95-48c8-867f-3006c69233e6.txt	yang146	yang146	7	737fa382-2f95-48c8-867f-3006c69233e6.txt,indexed	t
+55	yang147	178	44003814-64e4-4c86-817c-0b0f469ce58b.txt	yang147	yang147	7	44003814-64e4-4c86-817c-0b0f469ce58b.txt,indexed	f
+56	string	179	170	string	string	56	\N	f
+57	.txt	180	da21c3c5-1753-4006-a4a2-78703b3dbce3.txt	111	yang147.txt	7	\N	f
+59	.txt	182	3a25e881-03f2-49f7-85a5-1174ee8d1629.txt	111	yang147.txt	7	3a25e881-03f2-49f7-85a5-1174ee8d1629.txt,indexed	f
+61	yang148	184	166e2c1c-dfab-43c0-a9ee-daea373268b7.txt	yang148	yang148	7	166e2c1c-dfab-43c0-a9ee-daea373268b7.txt,indexed	f
+62	.txt	185	c4bc097a-e13c-4c31-b17a-9e1f5fff02fb.txt	111	yang148.txt	7	c4bc097a-e13c-4c31-b17a-9e1f5fff02fb.txt,indexed	f
+63	yang149	186	26fd7b8a-92fb-4a4d-a6b2-9278e6ed2f5b.txt	yang149	yang149	7	26fd7b8a-92fb-4a4d-a6b2-9278e6ed2f5b.txt,indexed	f
+64	yang149	187	910166a7-f160-4d15-af7d-d8f2938a614b.txt	yang149	yang149	7	910166a7-f160-4d15-af7d-d8f2938a614b.txt,indexed	f
+107	.pdf	230	3cad6dd3-0978-464d-aded-71a08545c99d.pdf	825344	Knowledge Graph Embedding.pdf	7	3cad6dd3-0978-464d-aded-71a08545c99d.pdfindexed	t
+65	yang149	188	0e283545-a907-4e67-9eee-e6881d051e37.txt	yang149	yang149	7	0e283545-a907-4e67-9eee-e6881d051e37.txt-indexed	f
+66	yang149	189	78b96483-83cd-4431-92ea-df981674abf3.txt	yang149	yang149	7	78b96483-83cd-4431-92ea-df981674abf3.txt-indexed	f
+77	yang152	200	189af001-662f-4869-8551-543258d3f536.pdf	yang152	yang152	7	\N	t
+67	yang149	190	c78a75d9-7b45-4ca9-91a6-321fc8a85b22.txt	yang149	yang149	7	c78a75d9-7b45-4ca9-91a6-321fc8a85b22.txtindexed	f
+90	.pdf	213	0c7dabd4-3740-4c88-9eff-aabbcfe7bd65.pdf	209920	file.pdf	7	0c7dabd4-3740-4c88-9eff-aabbcfe7bd65.pdfindexed	t
+68	.txt	191	8c9fc4a4-4ff9-44e9-b5f3-592bb13aa8b1.txt	7	yang150.txt	7	8c9fc4a4-4ff9-44e9-b5f3-592bb13aa8b1.txtindexed	f
+69	.txt	192	662fac4f-d61d-4b53-ae5c-d81a1e17bdc9.txt	7	yang150.txt	7	662fac4f-d61d-4b53-ae5c-d81a1e17bdc9.txtindexed	f
+70	.txt	193	f421c7a1-ca07-402a-8dbc-552b318f7f36.txt	7	yang150.txt	7	f421c7a1-ca07-402a-8dbc-552b318f7f36.txtindexed	f
+78	yang152	201	16a0bbd0-0fc5-4c2b-a0cc-14ef132caccc.pdf	yang152	yang152	7	16a0bbd0-0fc5-4c2b-a0cc-14ef132caccc.pdfindexed	t
+71	.txt	194	91d8ac91-9ab7-4ced-85f1-27807e8392a0.txt	7	yang150.txt	7	91d8ac91-9ab7-4ced-85f1-27807e8392a0.txtindexed	f
+60	.txt	183	943e07d4-96de-48b2-b08c-b83230bb3337.txt	111	yang143.txt	7	943e07d4-96de-48b2-b08c-b83230bb3337.txt,indexed	t
+98	.pdf	221	a2f71e38-b746-4373-80b9-1f4ae40c48c9.pdf	825344	Knowledge Graph Embedding.pdf	7	a2f71e38-b746-4373-80b9-1f4ae40c48c9.pdfindexed	t
+104	.pdf	227	9b9691b2-5fd1-4713-82fc-1d0e6f96afb9.pdf	825344	Knowledge Graph Embedding.pdf	7	9b9691b2-5fd1-4713-82fc-1d0e6f96afb9.pdfindexed	t
+72	yang150	195	b5edbef0-b184-44f4-a451-2c670e6c2aa4.txt	yang150	yang150	7	b5edbef0-b184-44f4-a451-2c670e6c2aa4.txtindexed	t
+73	yang150	196	9503daa3-a678-4f63-9b37-6432d41e8df4.txt	yang150	yang150	7	9503daa3-a678-4f63-9b37-6432d41e8df4.txtindexed	f
+88	yang160	211	92ebda8a-5d67-4dde-ae24-8c52568aa5d8.pdf	yang160	yang160	7	92ebda8a-5d67-4dde-ae24-8c52568aa5d8.pdfindexed	t
+89	yang161	212	3a2f74af-3765-415e-8ef4-1608b885c7f4.pdf	yang161	yang161	7	3a2f74af-3765-415e-8ef4-1608b885c7f4.pdfindexed	t
+106	.pdf	229	abdeb09d-cb7f-45d0-98ef-120f66c28ae7.pdf	825344	Knowledge Graph Embedding.pdf	7	abdeb09d-cb7f-45d0-98ef-120f66c28ae7.pdfindexed	t
+75	yang152	198	698310f6-46fb-42df-80ac-345f9a8d969c.pdf	yang152	yang152	7	\N	t
+74	yang151	197	08683abc-6207-4d86-b506-ddf4d0074f05.pdf	yang151	yang151	7	08683abc-6207-4d86-b506-ddf4d0074f05.pdfindexed	t
+101	.pdf	224	3ac00b7f-f6a5-4018-9c06-4546742a5de9.pdf	825344	Knowledge Graph Embedding.pdf	7	3ac00b7f-f6a5-4018-9c06-4546742a5de9.pdfindexed	t
+91	.pdf	214	7eebd01d-227e-4276-9420-515ade0e19fd.pdf	991232	file (5).pdf	7	7eebd01d-227e-4276-9420-515ade0e19fd.pdfindexed	t
+76	yang152	199	e79694a5-b1f4-4a76-bad5-b1d314488ef2.pdf	yang152	yang152	7	e79694a5-b1f4-4a76-bad5-b1d314488ef2.pdfindexed	t
+99	.pdf	222	a5db6fd3-79f4-4c9f-bf31-03d4dbadab5e.pdf	825344	Knowledge Graph Embedding.pdf	7	a5db6fd3-79f4-4c9f-bf31-03d4dbadab5e.pdfindexed	t
+86	yang160	209	8f4df9c5-f727-48db-946b-0158ff1269fb.pdf	yang160	yang160	7	8f4df9c5-f727-48db-946b-0158ff1269fb.pdfindexed	t
+87	yang160	210	4d2aaa3d-5813-4dcc-a43a-8bd3f03a6d53.pdf	yang160	yang160	7	4d2aaa3d-5813-4dcc-a43a-8bd3f03a6d53.pdfindexed	t
+96	.pdf	219	e29e58be-3432-40aa-85c6-d789b9f0d3ff.pdf	991232	a deep learning approach.pdf	7	e29e58be-3432-40aa-85c6-d789b9f0d3ff.pdfindexed	t
+97	.pdf	220	ba31a273-43e0-4616-bd5a-94a34bf55426.pdf	991232	a deep learning approach.pdf	7	ba31a273-43e0-4616-bd5a-94a34bf55426.pdfindexed	t
+84	.pdf	207	a95ff183-dd44-41ea-821f-fa14e7fabe6b.pdf	209920	file.pdf	7	a95ff183-dd44-41ea-821f-fa14e7fabe6b.pdfindexed	t
+85	.pdf	208	b2ea47a7-9a76-4c96-9827-6aa7ce08a7ff.pdf	209920	file.pdf	7	b2ea47a7-9a76-4c96-9827-6aa7ce08a7ff.pdfindexed	t
+94	.pdf	217	8bec423e-9ca2-4e3c-8548-00a6e0f59e5a.pdf	209920	Cloud Computing.pdf	7	8bec423e-9ca2-4e3c-8548-00a6e0f59e5a.pdfindexed	t
+81	yang152	204	beaffe8b-ace1-4841-9eb6-90cfafdcb668.pdf	yang152	yang152	7	beaffe8b-ace1-4841-9eb6-90cfafdcb668.pdfindexed	t
+93	.pdf	216	ab1745cd-1734-4543-9359-8b01804f27c9.pdf	209920	Cloud Computing.pdf	7	ab1745cd-1734-4543-9359-8b01804f27c9.pdfindexed	t
+83	yang160	206	0a728988-efb0-438f-9ccc-ba2e18c13c47.pdf	yang160	yang160	7	0a728988-efb0-438f-9ccc-ba2e18c13c47.pdfindexed	t
+95	.pdf	218	44432ae6-a2eb-4b4d-b222-b22410f7ff5e.pdf	209920	Cloud Computing.pdf	7	44432ae6-a2eb-4b4d-b222-b22410f7ff5e.pdfindexed	t
+80	yang152	203	9af9b901-8359-4a78-9f19-9b6389f38807.pdf	yang152	yang152	7	\N	t
+100	.pdf	223	65343bf9-748e-4177-b664-730c695d11bf.pdf	825344	Knowledge Graph Embedding.pdf	7	65343bf9-748e-4177-b664-730c695d11bf.pdfindexed	t
+92	.txt	215	f06652fd-64d0-4f20-b18b-cbc517ab1d1d.txt	2033	tehahahah.txt	7	f06652fd-64d0-4f20-b18b-cbc517ab1d1d.txtindexed	t
+105	.pdf	228	4b53c30e-9e9d-4366-9495-c83f90f407c0.pdf	825344	Knowledge Graph Embedding.pdf	7	4b53c30e-9e9d-4366-9495-c83f90f407c0.pdfindexed	t
+102	.pdf	225	4f143e28-22c5-47e4-9c25-21de41a5f374.pdf	825344	Knowledge Graph Embedding.pdf	7	4f143e28-22c5-47e4-9c25-21de41a5f374.pdfindexed	t
+103	.pdf	226	87b20afb-8286-44e6-9018-5a93307c3f8f.pdf	825344	Knowledge Graph Embedding.pdf	7	87b20afb-8286-44e6-9018-5a93307c3f8f.pdfindexed	t
+108	.pdf	231	394c5755-1acd-451a-a2a6-367a040324b2.pdf	825344	Knowledge Graph Embedding.pdf	7	394c5755-1acd-451a-a2a6-367a040324b2.pdfindexed	t
+82	yang160	205	a12f2434-eb84-4d0c-9b42-e4eb74172d3d.pdf	yang160	yang160	7	a12f2434-eb84-4d0c-9b42-e4eb74172d3d.pdfindexed	t
+79	yang152	202	f516ec83-fe5c-44a0-bb8e-404d245c5b10.pdf	yang152	yang152	7	f516ec83-fe5c-44a0-bb8e-404d245c5b10.pdfindexed	t
+111	.pdf	234	bbfdcee2-5eee-4ea8-8d74-fd7a3bb4ddba.pdf	209920	Cloud Computing.pdf	110	bbfdcee2-5eee-4ea8-8d74-fd7a3bb4ddba.pdfindexed	f
+109	.pdf	232	a4bead10-847f-453f-a973-e7e03ba8fb8b.pdf	825344	Knowledge Graph Embedding.pdf	7	a4bead10-847f-453f-a973-e7e03ba8fb8b.pdfindexed	t
+112	.pdf	235	6bbb2540-4a30-463e-94bc-ac804e8f6c1b.pdf	825344	Knowledge Graph Embedding.pdf	110	6bbb2540-4a30-463e-94bc-ac804e8f6c1b.pdfindexed	f
+113	.pdf	236	f545eec7-e09d-4cef-9df8-bc2a4fce7721.pdf	991232	a deep learning approach.pdf	110	f545eec7-e09d-4cef-9df8-bc2a4fce7721.pdfindexed	f
+115	.pdf	238	e23d50ff-df59-4fee-bf81-0ded9119eae3.pdf	991232	a deep learning approach.pdf	110	e23d50ff-df59-4fee-bf81-0ded9119eae3.pdfindexed	t
+110	.pdf	233	8283255c-41ad-4fd5-a78c-f13bcb63af1d.pdf	825344	Knowledge Graph Embedding.pdf	110	8283255c-41ad-4fd5-a78c-f13bcb63af1d.pdfindexed	t
+114	.pdf	237	84814a10-a1b3-43ce-adc9-f9a60c75a84f.pdf	991232	a deep learning approach.pdf	110	84814a10-a1b3-43ce-adc9-f9a60c75a84f.pdfindexed	t
+117	.pdf	240	92697392-5bb0-4d7e-aa79-3e16e31dc33d.pdf	209920	Cloud Computing.pdf	110	92697392-5bb0-4d7e-aa79-3e16e31dc33d.pdfindexed	f
+116	.pdf	239	1a8ba04a-99dd-4f31-88ea-abaf6f587e4f.pdf	991232	a deep learning approach.pdf	110	1a8ba04a-99dd-4f31-88ea-abaf6f587e4f.pdfindexed	t
+118	.pdf	241	7b6359ad-7407-4826-bfd5-fdb7bff1a6cf.pdf	209920	Cloud Computing.pdf	110	7b6359ad-7407-4826-bfd5-fdb7bff1a6cf.pdfindexed	t
+119	.pdf	242	a00bd6c9-73d0-4abb-bb11-96e373c6e002.pdf	209920	Cloud Computing.pdf	110	a00bd6c9-73d0-4abb-bb11-96e373c6e002.pdfindexed	t
+120	.pdf	243	cd4078f1-68d5-45d1-89ad-2df220b390a9.pdf	209920	Cloud Computing.pdf	110	cd4078f1-68d5-45d1-89ad-2df220b390a9.pdfindexed	t
+121	.pdf	244	3f5c67b2-20d4-4c9d-b911-7b27deb436ed.pdf	209920	Cloud Computing.pdf	110	3f5c67b2-20d4-4c9d-b911-7b27deb436ed.pdfindexed	t
+\.
+
+
+--
+-- TOC entry 3359 (class 0 OID 16721)
+-- Dependencies: 225
+-- Data for Name: nfsserver; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.nfsserver (nfsid, mntpath) FROM stdin;
+110	/mnt/nfs-solr
+111	/mnt/nfs-solr
+112	/mnt/nfs-solr
+113	/mnt/nfs-solr
+114	/mnt/nfs-solr
+1	mnt1
+2	mnt2
+3	mnt3
+4	mnt4
+5	mnt5
+6	mnt6
+7	/mnt/nfs-solr
+10	mnt8
+12	mnt8
+13	mnt8
+14	mnt8
+15	mnt8
+16	mnt8
+17	mnt8
+18	/mnt/nfs-solr
+19	/mnt/nfs-solr
+20	/mnt/nfs-solr
+21	/mnt/nfs-solr
+22	/mnt/nfs-solr
+23	/mnt/nfs-solr
+24	/mnt/nfs-solr
+25	/mnt/nfs-solr
+26	/mnt/nfs-solr
+27	/mnt/nfs-solr
+28	/mnt/nfs-solr
+29	/mnt/nfs-solr
+30	/mnt/nfs-solr
+31	/mnt/nfs-solr
+32	/mnt/nfs-solr
+33	/mnt/nfs-solr
+34	/mnt/nfs-solr
+35	/mnt/nfs-solr
+36	/mnt/nfs-solr
+37	/mnt/nfs-solr
+38	/mnt/nfs-solr
+39	/mnt/nfs-solr
+40	/mnt/nfs-solr
+41	/mnt/nfs-solr
+42	/mnt/nfs-solr
+43	/mnt/nfs-solr
+44	/mnt/nfs-solr
+45	/mnt/nfs-solr
+46	/mnt/nfs-solr
+47	/mnt/nfs-solr
+48	/mnt/nfs-solr
+49	/mnt/nfs-solr
+50	/mnt/nfs-solr
+51	/mnt/nfs-solr
+52	/mnt/nfs-solr
+53	/mnt/nfs-solr
+54	/mnt/nfs-solr
+55	/mnt/nfs-solr
+56	mnt
+57	/mnt/nfs-solr
+58	/mnt/nfs-solr
+59	/mnt/nfs-solr
+60	/mnt/nfs-solr
+61	/mnt/nfs-solr
+62	/mnt/nfs-solr
+63	/mnt/nfs-solr
+64	/mnt/nfs-solr
+65	/mnt/nfs-solr
+66	/mnt/nfs-solr
+67	/mnt/nfs-solr
+68	/mnt/nfs-solr
+69	/mnt/nfs-solr
+70	/mnt/nfs-solr
+71	/mnt/nfs-solr
+72	/mnt/nfs-solr
+73	/mnt/nfs-solr
+74	/mnt/nfs-solr
+75	/mnt/nfs-solr
+76	/mnt/nfs-solr
+77	/mnt/nfs-solr
+78	/mnt/nfs-solr
+79	/mnt/nfs-solr
+80	/mnt/nfs-solr
+81	/mnt/nfs-solr
+82	/mnt/nfs-solr
+83	/mnt/nfs-solr
+84	/mnt/nfs-solr
+85	/mnt/nfs-solr
+86	/mnt/nfs-solr
+87	/mnt/nfs-solr
+88	/mnt/nfs-solr
+89	/mnt/nfs-solr
+90	/mnt/nfs-solr
+91	/mnt/nfs-solr
+92	/mnt/nfs-solr
+93	/mnt/nfs-solr
+94	/mnt/nfs-solr
+95	/mnt/nfs-solr
+96	/mnt/nfs-solr
+97	/mnt/nfs-solr
+98	/mnt/nfs-solr
+99	/mnt/nfs-solr
+100	/mnt/nfs-solr
+101	/mnt/nfs-solr
+102	/mnt/nfs-solr
+103	/mnt/nfs-solr
+104	/mnt/nfs-solr
+105	/mnt/nfs-solr
+106	/mnt/nfs-solr
+107	/mnt/nfs-solr
+108	/mnt/nfs-solr
+109	/mnt/nfs-solr
+115	/mnt/nfs-solr
+116	/mnt/nfs-solr
+117	/mnt/nfs-solr
+118	/mnt/nfs-solr
+119	/mnt/nfs-solr
+120	/mnt/nfs-solr
+121	/mnt/nfs-solr
+\.
+
+
+--
+-- TOC entry 3356 (class 0 OID 16700)
+-- Dependencies: 222
+-- Data for Name: organization; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.organization (orgid, name, address) FROM stdin;
+1	uni	stuttgart
+2	uni	stuttgart
+3	uni	stuttgart
+4	uni	stuttgart
+5	uni	stuttgart
+6	uni	stuttgart
+5200	yangorgname	yangorgaddress
+8	string	string
+112	yang112name	yang112address
+113	yang113name	yang113address
+114	yang114name	yang114address
+115	yang115name	yang115address
+116	yang116name	yang116address
+117	yang117name	yang117address
+118	yang118orgname	yang118orgaddress
+119	yang119orgname	yang119orgaddress
+120	yang120orgname	yang120orgaddress
+121	yang121orgname	yang121orgaddress
+122	yang122orgname	yang122orgaddress
+123	yang123orgname	yang123orgaddress
+7	nametest	addresstest
+9	nametest	addresstest
+10	nametest	addresstest
+11	nametest	addresstest
+12	nametest	addresstest
+13	nametest	addresstest
+14	nametest	addresstest
+15	nametest	addresstest
+16	nametest	addresstest
+17	nametest	addresstest
+18	nametest	addresstest
+19	nametest	addresstest
+20	nametest	addresstest
+21	nametest	addresstest
+22	nametest	addresstest
+23	nametest	addresstest
+24	nametest	addresstest
+25	nametest	addresstest
+26	nametest	addresstest
+27	nametest	addresstest
+28	nametest	addresstest
+29	nametest	addresstest
+30	nametest	addresstest
+31	nametest	addresstest
+32	nametest	addresstest
+33	nametest	addresstest
+34	nametest	addresstest
+35	nametest	addresstest
+36	nametest	addresstest
+37	nametest	addresstest
+38	nametest	addresstest
+39	nametest	addresstest
+40	nametest	addresstest
+41	nametest	addresstest
+42	nametest	addresstest
+43	nametest	addresstest
+44	nametest	addresstest
+45	nametest	addresstest
+46	nametest	addresstest
+47	nametest	addresstest
+48	nametest	addresstest
+49	nametest	addresstest
+50	nametest	addresstest
+51	nametest	addresstest
+52	nametest	addresstest
+53	nametest	addresstest
+54	nametest	addresstest
+55	nametest	addresstest
+56	nametest	addresstest
+57	nametest	addresstest
+58	nametest	addresstest
+59	nametest	addresstest
+60	nametest	addresstest
+61	nametest	addresstest
+62	nametest	addresstest
+63	nametest	addresstest
+64	nametest	addresstest
+65	nametest	addresstest
+66	nametest	addresstest
+67	nametest	addresstest
+68	nametest	addresstest
+69	nametest	addresstest
+70	nametest	addresstest
+71	nametest	addresstest
+72	nametest	addresstest
+73	nametest	addresstest
+74	nametest	addresstest
+75	nametest	addresstest
+76	nametest	addresstest
+77	nametest	addresstest
+78	nametest	addresstest
+79	nametest	addresstest
+80	nametest	addresstest
+81	nametest	addresstest
+82	nametest	addresstest
+83	nametest	addresstest
+84	nametest	addresstest
+85	nametest	addresstest
+86	nametest	addresstest
+87	nametest	addresstest
+88	nametest	addresstest
+89	nametest	addresstest
+90	nametest	addresstest
+91	nametest	addresstest
+92	nametest	addresstest
+93	nametest	addresstest
+94	nametest	addresstest
+95	nametest	addresstest
+96	nametest	addresstest
+97	nametest	addresstest
+98	nametest	addresstest
+99	nametest	addresstest
+100	nametest	addresstest
+101	nametest	addresstest
+102	nametest	addresstest
+103	nametest	addresstest
+104	nametest	addresstest
+105	nametest	addresstest
+106	nametest	addresstest
+107	nametest	addresstest
+108	nametest	addresstest
+109	nametest	addresstest
+110	nametest	addresstest
+111	nametest	addresstest
+124	nametest	addresstest
+125	nametest	addresstest
+126	nametest	addresstest
+127	nametest	addresstest
+128	nametest	addresstest
+129	nametest	addresstest
+130	nametest	addresstest
+131	orgname	orgaddress
+132	orgname	orgaddress
+133	orgname	orgaddress
+134	yang124orgname	yang124orgaddress
+135	yang124orgname	yang124orgaddress
+136	name	add
+137	yang124orgname	yang124orgaddress
+138	yang124orgname	yang124orgaddress
+139	yang124orgname	yang124orgaddress
+140	yang124orgname	yang124orgaddress
+141	yang125	yang125
+142	yang125	yang125
+143	yang125	yang125
+144	a	a
+145	a	a
+146	a	a
+147	a	a
+148	a	a
+149	a	a
+150	a	a
+151	yang130	yang130
+152	yang130	yang130
+153	yang130	yang130
+154	yang131	yang131
+155	yang131	yang131
+156	yang131	yang131
+157	yang131	yang131
+158	yang131	yang131
+159	yang131	yang131
+160	yang132	yang132
+161	yang132	yang132
+162	yang132	yang132
+163	yang140	yang140
+164	yang141	yang141
+165	yang141	yang141
+166	yang142	yang142
+167	yang142	yang142
+168	yang143	yang143
+169	yang143	yang143
+170	yang144	yang144
+171	yang144	yang144
+172	yang145	yang145
+173	yang145	yang145
+174	yang146	yang146
+175	yang146	yang146
+176	yang147	yang147
+177	yang147	yang147
+178	string	string
+179	aaa	address
+180	aa	address
+181	bb	address
+182	cc	address
+183	yang148	yang148
+184	cc	address
+185	yang149	yang149
+186	yang149	yang149
+187	yang149	yang149
+188	yang149	yang149
+189	yang149	yang149
+190	yang149	yang149
+191	yang149	yang149
+192	yang150	undefined
+193	yang150	undefined
+194	yang150	undefined
+195	aaa	undefined
+196	yang150	yang150
+197	yang150	yang150
+198	yang151	yang151
+199	yang151	yang151
+200	yang152	yang152
+201	yang152	yang152
+202	yang152	yang152
+203	yang152	yang152
+204	yang152	yang152
+205	yang152	yang152
+206	yang152	yang152
+207	yang160	yang160
+208	yang160	yang160
+209	uni	undefined
+210	uni	undefined
+211	yang160	yang160
+212	yang160	yang160
+213	yang160	yang160
+214	yang160	yang160
+215	yang161	yang161
+216	University of Stuttgart, Faculty of Computer Science, Electrical Engineering, and Information Technology, Germany	undefined
+217	University of Stuttgart, Faculty of Computer Science, Electrical Engineering, and Information Technology, Germany	undefined
+218	em	undefined
+219	undefined	undefined
+220	uni	undefined
+221	undefined	undefined
+222	undefined	undefined
+223	undefined	undefined
+224	undefined	undefined
+225	undefined	undefined
+226	undefined	undefined
+227	undefined	undefined
+228	undefined	undefined
+229	undefined	undefined
+230	undefined	undefined
+231	undefined	undefined
+232	undefined	undefined
+233	undefined	undefined
+234	undefined	undefined
+235	undefined	undefined
+236	undefined	undefined
+237	Uni Stuttgart	undefined
+238	Uni Stuttgart	undefined
+239	undefined	undefined
+240	undefined	undefined
+241	undefined	undefined
+242		undefined
+243	undefined	undefined
+244	undefined	undefined
+245	Uni Stuttgart	undefined
+246	undefined	undefined
+247	undefined	undefined
+\.
+
+
+--
+-- TOC entry 3357 (class 0 OID 16707)
+-- Dependencies: 223
+-- Data for Name: publication; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.publication (pubid, orgid, title, date, publication_json) FROM stdin;
+1	1	info1	2022	\N
+2	2	info2	2022	\N
+3	3	info3	2022	\N
+4	4	info4	2022	\N
+5	5	info5	2022	\N
+6	6	info6	2022	\N
+5200	5200	yantitle	yangdate	\N
+0	8	string	string	\N
+112	112	yang112title	yang112	\N
+113	113	yang113title	yang113	\N
+114	114	yang114title	yang114	\N
+115	115	yang115title	yang115	\N
+116	116	yang116title	yang116	\N
+117	117	yang117title	yang117	\N
+118	118	yang118title	1999.05.20	\N
+119	119	yang119title	yang119date	\N
+120	120	yang120title	yang120date	\N
+121	121	yang121title	yang121date	\N
+122	122	yang122title	yang122date	\N
+123	123	yang123title	yang123date	\N
+7	1	testtitle	testdate	\N
+8	1	testtitle	testdate	\N
+9	1	testtitle	testdate	\N
+10	1	testtitle	testdate	\N
+11	1	testtitle	testdate	\N
+12	1	testtitle	testdate	\N
+13	1	testtitle	testdate	\N
+14	1	testtitle	testdate	\N
+15	1	testtitle	testdate	\N
+16	1	testtitle	testdate	\N
+17	1	testtitle	testdate	\N
+18	1	testtitle	testdate	\N
+19	1	testtitle	testdate	\N
+20	1	testtitle	testdate	\N
+21	1	testtitle	testdate	\N
+22	1	testtitle	testdate	\N
+23	1	testtitle	testdate	\N
+24	1	testtitle	testdate	\N
+25	1	testtitle	testdate	\N
+26	1	testtitle	testdate	\N
+27	1	testtitle	testdate	\N
+28	1	testtitle	testdate	\N
+29	1	testtitle	testdate	\N
+30	1	testtitle	testdate	\N
+31	1	testtitle	testdate	\N
+32	1	testtitle	testdate	\N
+33	1	testtitle	testdate	\N
+34	1	testtitle	testdate	\N
+35	1	testtitle	testdate	\N
+36	1	testtitle	testdate	\N
+37	1	testtitle	testdate	\N
+38	1	testtitle	testdate	\N
+39	1	testtitle	testdate	\N
+40	1	testtitle	testdate	\N
+41	1	testtitle	testdate	\N
+42	1	testtitle	testdate	\N
+43	1	testtitle	testdate	\N
+44	1	testtitle	testdate	\N
+45	1	testtitle	testdate	\N
+46	1	testtitle	testdate	\N
+47	1	testtitle	testdate	\N
+48	1	testtitle	testdate	\N
+49	1	testtitle	testdate	\N
+50	1	testtitle	testdate	\N
+51	1	testtitle	testdate	\N
+52	1	testtitle	testdate	\N
+53	1	testtitle	testdate	\N
+54	1	testtitle	testdate	\N
+55	1	testtitle	testdate	\N
+56	1	testtitle	testdate	\N
+57	1	testtitle	testdate	\N
+58	1	testtitle	testdate	\N
+59	1	testtitle	testdate	\N
+60	1	testtitle	testdate	\N
+61	1	testtitle	testdate	\N
+62	1	testtitle	testdate	\N
+63	1	testtitle	testdate	\N
+64	1	testtitle	testdate	\N
+65	1	testtitle	testdate	\N
+66	1	testtitle	testdate	\N
+67	1	testtitle	testdate	\N
+68	1	testtitle	testdate	\N
+69	1	testtitle	testdate	\N
+70	1	testtitle	testdate	\N
+71	1	testtitle	testdate	\N
+72	1	testtitle	testdate	\N
+73	1	testtitle	testdate	\N
+74	1	testtitle	testdate	\N
+75	1	testtitle	testdate	\N
+76	1	testtitle	testdate	\N
+77	1	testtitle	testdate	\N
+78	1	testtitle	testdate	\N
+79	1	testtitle	testdate	\N
+80	1	testtitle	testdate	\N
+81	1	testtitle	testdate	\N
+82	1	testtitle	testdate	\N
+83	1	testtitle	testdate	\N
+84	1	testtitle	testdate	\N
+85	1	testtitle	testdate	\N
+86	1	testtitle	testdate	\N
+87	1	testtitle	testdate	\N
+88	1	testtitle	testdate	\N
+89	1	testtitle	testdate	\N
+90	1	testtitle	testdate	\N
+91	1	testtitle	testdate	\N
+92	1	testtitle	testdate	\N
+93	1	testtitle	testdate	\N
+94	1	testtitle	testdate	\N
+95	1	testtitle	testdate	\N
+96	1	testtitle	testdate	\N
+97	1	testtitle	testdate	\N
+98	1	testtitle	testdate	\N
+99	1	testtitle	testdate	\N
+100	1	testtitle	testdate	\N
+101	1	testtitle	testdate	\N
+102	1	testtitle	testdate	\N
+103	1	testtitle	testdate	\N
+104	1	testtitle	testdate	\N
+105	1	testtitle	testdate	\N
+106	1	testtitle	testdate	\N
+107	1	testtitle	testdate	\N
+108	1	testtitle	testdate	\N
+109	1	testtitle	testdate	\N
+110	1	testtitle	testdate	\N
+111	1	testtitle	testdate	\N
+124	1	testtitle	testdate	\N
+125	1	testtitle	testdate	\N
+126	1	testtitle	testdate	\N
+127	1	testtitle	testdate	\N
+128	1	testtitle	testdate	\N
+129	1	testtitle	testdate	\N
+130	1	testtitle	testdate	\N
+131	1	testtitle	testdate	\N
+132	1	testtitle	testdate	\N
+133	1	testtitle	testdate	\N
+134	1	testtitle	testdate	\N
+135	1	testtitle	testdate	\N
+145	144	a	a	\N
+146	145	a	a	\N
+147	146	a	a	\N
+148	147	a	a	\N
+149	148	a	a	\N
+150	149	a	a	\N
+151	150	a	a	\N
+152	151	yang130	yang130	\N
+153	152	yang130	yang130	\N
+154	153	yang130	yang130	\N
+155	154	yang131	yang131	\N
+156	155	yang131	yang131	\N
+157	156	yang131	yang131	\N
+158	157	yang131	yang131	\N
+159	158	yang131	yang131	\N
+160	159	yang131	yang131	\N
+161	160	yang132	yang132	\N
+162	161	yang132	yang132	\N
+163	162	yang132	yang132	\N
+164	163	yang140	yang140	\N
+165	164	yang141	yang141	\N
+166	165	yang141	yang141	\N
+167	166	yang142	yang142	\N
+168	167	yang142	yang142	\N
+169	168	yang143	yang143	\N
+170	169	yang143	yang143	\N
+171	170	yang144	yang144	\N
+172	171	yang144	yang144	\N
+173	172	yang145	yang145	\N
+174	173	yang145	yang145	\N
+175	174	yang146	yang146	\N
+176	175	yang146	yang146	\N
+177	176	yang147	yang147	\N
+178	177	yang147	yang147	\N
+179	178	string	string	\N
+180	179	aaa	aa	\N
+181	180	aa	aa	\N
+182	181	bb	bb	\N
+183	182	cc	cc	\N
+184	183	yang148	yang148	\N
+185	184	cc	cc	\N
+186	187	yang149	yang149	{"path": "/user/create", "error": "Internal Server Error", "status": 500, "message": "", "timestamp": "2022-10-15T19:56:06.302+00:00"}
+187	188	yang149	yang149	[{"age": 20, "name": "yang"}]
+188	189	yang149	yang149	[{"age": 20, "name": "yang"}]
+189	190	yang149	yang149	[{"age": 20, "name": "yang"}]
+190	191	yang149	yang149	[{"age": 20, "name": "yang"}]
+191	192	yang150	yang150	{"": ""}
+192	193	yang150	yang150	{"testkey1": "testvalue1", "testkey2": "testvalue2"}
+193	194	yang150	yang150	{"testkey1": "testvalue1", "testkey2": "testvalue2"}
+194	195	trivedi2020plant	aaa	{"": ""}
+195	196	yang150	yang150	{"age": 20, "name": "yang"}
+196	197	yang150	yang150	{"age": 20, "name": "yang"}
+197	199	yang151	yang151	{"age": 200, "name": "yang"}
+198	200	yang152	yang152	{"age": 55, "name": "haoran"}
+199	201	yang152	yang152	{"age": 55, "name": "haoran"}
+200	202	yang152	yang152	{"name": "haoran"}
+201	203	yang152	yang152	{"name": "haoran"}
+202	204	yang152	yang152	{"name": "haoran"}
+203	205	yang152	yang152	{"age": 66, "name": "haoran"}
+204	206	yang152	yang152	{"age": 66, "name": "haoran"}
+205	207	yang160	yang160	{"age": 160, "name": "haoran"}
+206	208	yang160	yang160	{"age": 160, "name": "haoran"}
+207	209	Cloud Computing: Issues and Challenges	2020	{"type": "paper", "language": "english"}
+208	210	Cloud Computing: Issues and Challenges	2020	{"empty": "empty"}
+209	211	yang160	yang160	\N
+210	213	yang160	yang160	\N
+211	214	yang160	yang160	\N
+212	215	yang161	yang161	\N
+213	216	A Graph Structure to Discover Patterns in Unstructured Processes of Product Development	2022	{"language": "English", "bookTitle": "Proceedings of the 23rd International Conference on Information Reuse and Integration for Data Science (IRI 2022)", "publisher": "IEEE"}
+214	217	Data Shopping — How an Enterprise Data Marketplace Supports Data Democratization in Companies	2022	{"language": "English", "bookTitle": "Proceedings of the 34th International Conference on Intelligent Information Systems", "publisher": "Springer International Publishing"}
+215	218	test ahahhaha monday friday happy	em	\N
+216	219	Cloud computing: issues and challenges	2010	{"bookTitle": "2010 24th IEEE international conference on advanced information networking and applications"}
+217	220	Cloud computing: issues and challenges	2010	{"language": "English", "bookTitle": "2010 24th IEEE international conference on advanced information networking and applications"}
+218	221	Cloud computing: issues and challenges	2010	{"bookTitle": "2010 24th IEEE international conference on advanced information networking and applications"}
+219	222	A deep learning approach to network intrusion detection	2018	{"publisher": "IEEE"}
+220	223	A deep learning approach to network intrusion detection	2010	{"publisher": "IEEE"}
+221	224	Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+222	225	Knowledge graph embedding: A survey of approaches and applications	2017	{"language": "English", "publisher": "IEEE"}
+223	226	Knowledge graph embedding: A survey of approaches and applications	2017	{"language": "english", "publisher": "IEEE"}
+224	227	new Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+225	228	new1 Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+226	229	new 5 Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+227	230	new 6 Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+228	231	9 Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+229	232	Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+230	233	Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+231	234	Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+232	235	Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+233	236	Knowledge graph embedding: A survey of approaches and applications	2017	{"publisher": "IEEE"}
+234	237	Cloud computing: issues and challenges	2010	{"language": "German", "bookTitle": "2010 24th IEEE international conference on advanced information networking and applications"}
+235	238	Knowledge graph embedding: A survey of approaches and applications	2010	{"publisher": "IEEE"}
+236	239	A deep learning approach to network intrusion detection	2010	{"publisher": "IEEE"}
+237	240	A deep learning approach to network intrusion detection	2010	{"publisher": "IEEE"}
+238	241	A deep learning approach to network intrusion detection	2018	{"publisher": "IEEE"}
+239	242	test	2011	\N
+240	243	Cloud computing: issues and challenges	2009	{"bookTitle": "2010 24th IEEE international conference on advanced information networking and applications"}
+241	244	Cloud computing: issues and challenges	2010	{"language": "English", "bookTitle": "2010 24th IEEE international conference on advanced information networking and applications"}
+242	245	Cloud computing: issues and challenges	2010	{"language": "English", "bookTitle": "2010 24th IEEE international conference on advanced information networking and applications"}
+243	246	Cloud computing: issues and challenges	2010	{"language": "english", "bookTitle": "2010 24th IEEE international conference on advanced information networking and applications"}
+244	247	Cloud computing: issues and challenges	2010	{"language": "english", "bookTitle": "2010 24th IEEE international conference on advanced information networking and applications"}
+\.
+
+
+--
+-- TOC entry 3408 (class 0 OID 0)
+-- Dependencies: 226
+-- Name: seq; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq', 235, true);
+
+
+--
+-- TOC entry 3409 (class 0 OID 0)
+-- Dependencies: 227
+-- Name: seq1; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq1', 247, true);
+
+
+--
+-- TOC entry 3410 (class 0 OID 0)
+-- Dependencies: 228
+-- Name: seq2; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq2', 244, true);
+
+
+--
+-- TOC entry 3411 (class 0 OID 0)
+-- Dependencies: 229
+-- Name: seq3; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq3', 15, true);
+
+
+--
+-- TOC entry 3412 (class 0 OID 0)
+-- Dependencies: 230
+-- Name: seq4; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq4', 9, true);
+
+
+--
+-- TOC entry 3413 (class 0 OID 0)
+-- Dependencies: 231
+-- Name: seq5; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq5', 4, true);
+
+
+--
+-- TOC entry 3414 (class 0 OID 0)
+-- Dependencies: 232
+-- Name: seq6; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq6', 5, true);
+
+
+--
+-- TOC entry 3415 (class 0 OID 0)
+-- Dependencies: 233
+-- Name: seq7; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq7', 121, true);
+
+
+--
+-- TOC entry 3416 (class 0 OID 0)
+-- Dependencies: 234
+-- Name: seq8; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq8', 4, true);
+
+
+--
+-- TOC entry 3417 (class 0 OID 0)
+-- Dependencies: 235
+-- Name: seq9; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq9', 5, false);
+
+
+--
+-- TOC entry 3418 (class 0 OID 0)
+-- Dependencies: 236
+-- Name: seqnfs; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seqnfs', 121, true);
+
+
+--
+-- TOC entry 3196 (class 2606 OID 24648)
+-- Name: author author_pk; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.author
+    ADD CONSTRAINT author_pk PRIMARY KEY (authorid);
+
+
+--
+-- TOC entry 3202 (class 2606 OID 16720)
+-- Name: document document_pk; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.document
+    ADD CONSTRAINT document_pk PRIMARY KEY (docid);
+
+
+--
+-- TOC entry 3204 (class 2606 OID 24726)
+-- Name: nfsserver nfsserver_pk; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.nfsserver
+    ADD CONSTRAINT nfsserver_pk PRIMARY KEY (nfsid);
+
+
+--
+-- TOC entry 3198 (class 2606 OID 16706)
+-- Name: organization organization_pk; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.organization
+    ADD CONSTRAINT organization_pk PRIMARY KEY (orgid);
+
+
+--
+-- TOC entry 3200 (class 2606 OID 16713)
+-- Name: publication publication_pk; Type: CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.publication
+    ADD CONSTRAINT publication_pk PRIMARY KEY (pubid);
+
+
+--
+-- TOC entry 3205 (class 2606 OID 16744)
+-- Name: author author_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.author
+    ADD CONSTRAINT author_fk FOREIGN KEY (pubid) REFERENCES public.publication(pubid);
+
+
+--
+-- TOC entry 3207 (class 2606 OID 16729)
+-- Name: document document_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.document
+    ADD CONSTRAINT document_fk FOREIGN KEY (pubid) REFERENCES public.publication(pubid);
+
+
+--
+-- TOC entry 3208 (class 2606 OID 24727)
+-- Name: document document_fk1; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.document
+    ADD CONSTRAINT document_fk1 FOREIGN KEY (nfsid) REFERENCES public.nfsserver(nfsid);
+
+
+--
+-- TOC entry 3206 (class 2606 OID 16739)
+-- Name: publication publication_fk; Type: FK CONSTRAINT; Schema: public; Owner: postgres
+--
+
+ALTER TABLE ONLY public.publication
+    ADD CONSTRAINT publication_fk FOREIGN KEY (orgid) REFERENCES public.organization(orgid);
+
+
+--
+-- TOC entry 3377 (class 0 OID 0)
+-- Dependencies: 10
+-- Name: SCHEMA metric_helpers; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA metric_helpers TO admin;
+GRANT USAGE ON SCHEMA metric_helpers TO robot_zmon;
+
+
+--
+-- TOC entry 3378 (class 0 OID 0)
+-- Dependencies: 8
+-- Name: SCHEMA user_management; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA user_management TO admin;
+
+
+--
+-- TOC entry 3382 (class 0 OID 0)
+-- Dependencies: 269
+-- Name: FUNCTION get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean); Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) TO admin;
+GRANT ALL ON FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) TO robot_zmon;
+
+
+--
+-- TOC entry 3383 (class 0 OID 0)
+-- Dependencies: 271
+-- Name: FUNCTION get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean); Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) TO admin;
+GRANT ALL ON FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) TO robot_zmon;
+
+
+--
+-- TOC entry 3384 (class 0 OID 0)
+-- Dependencies: 270
+-- Name: FUNCTION pg_stat_statements(showtext boolean); Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION metric_helpers.pg_stat_statements(showtext boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION metric_helpers.pg_stat_statements(showtext boolean) TO admin;
+GRANT ALL ON FUNCTION metric_helpers.pg_stat_statements(showtext boolean) TO robot_zmon;
+
+
+--
+-- TOC entry 3385 (class 0 OID 0)
+-- Dependencies: 237
+-- Name: FUNCTION pg_switch_wal(); Type: ACL; Schema: pg_catalog; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION pg_catalog.pg_switch_wal() TO admin;
+
+
+--
+-- TOC entry 3386 (class 0 OID 0)
+-- Dependencies: 268
+-- Name: FUNCTION pg_stat_statements_reset(userid oid, dbid oid, queryid bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.pg_stat_statements_reset(userid oid, dbid oid, queryid bigint) TO admin;
+
+
+--
+-- TOC entry 3387 (class 0 OID 0)
+-- Dependencies: 263
+-- Name: FUNCTION set_user(text); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.set_user(text) TO admin;
+
+
+--
+-- TOC entry 3389 (class 0 OID 0)
+-- Dependencies: 265
+-- Name: FUNCTION create_application_user(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_application_user(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_application_user(username text) TO admin;
+
+
+--
+-- TOC entry 3391 (class 0 OID 0)
+-- Dependencies: 253
+-- Name: FUNCTION create_application_user_or_change_password(username text, password text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_application_user_or_change_password(username text, password text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_application_user_or_change_password(username text, password text) TO admin;
+
+
+--
+-- TOC entry 3393 (class 0 OID 0)
+-- Dependencies: 266
+-- Name: FUNCTION create_role(rolename text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_role(rolename text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_role(rolename text) TO admin;
+
+
+--
+-- TOC entry 3395 (class 0 OID 0)
+-- Dependencies: 267
+-- Name: FUNCTION create_user(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_user(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_user(username text) TO admin;
+
+
+--
+-- TOC entry 3397 (class 0 OID 0)
+-- Dependencies: 243
+-- Name: FUNCTION drop_role(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.drop_role(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.drop_role(username text) TO admin;
+
+
+--
+-- TOC entry 3399 (class 0 OID 0)
+-- Dependencies: 242
+-- Name: FUNCTION drop_user(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.drop_user(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.drop_user(username text) TO admin;
+
+
+--
+-- TOC entry 3401 (class 0 OID 0)
+-- Dependencies: 238
+-- Name: FUNCTION revoke_admin(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.revoke_admin(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.revoke_admin(username text) TO admin;
+
+
+--
+-- TOC entry 3403 (class 0 OID 0)
+-- Dependencies: 244
+-- Name: FUNCTION terminate_backend(pid integer); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.terminate_backend(pid integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.terminate_backend(pid integer) TO admin;
+
+
+--
+-- TOC entry 3404 (class 0 OID 0)
+-- Dependencies: 219
+-- Name: TABLE index_bloat; Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+GRANT SELECT ON TABLE metric_helpers.index_bloat TO admin;
+GRANT SELECT ON TABLE metric_helpers.index_bloat TO robot_zmon;
+
+
+--
+-- TOC entry 3405 (class 0 OID 0)
+-- Dependencies: 220
+-- Name: TABLE pg_stat_statements; Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+GRANT SELECT ON TABLE metric_helpers.pg_stat_statements TO admin;
+GRANT SELECT ON TABLE metric_helpers.pg_stat_statements TO robot_zmon;
+
+
+--
+-- TOC entry 3406 (class 0 OID 0)
+-- Dependencies: 218
+-- Name: TABLE table_bloat; Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+GRANT SELECT ON TABLE metric_helpers.table_bloat TO admin;
+GRANT SELECT ON TABLE metric_helpers.table_bloat TO robot_zmon;
+
+
+--
+-- TOC entry 3407 (class 0 OID 0)
+-- Dependencies: 121
+-- Name: TABLE pg_stat_activity; Type: ACL; Schema: pg_catalog; Owner: postgres
+--
+
+GRANT SELECT ON TABLE pg_catalog.pg_stat_activity TO admin;
+
+
+-- Completed on 2022-10-30 16:26:52
+
+--
+-- PostgreSQL database dump complete
+--
+
+--
+-- Database "postgres" dump
+--
+
+\connect postgres
+
+--
+-- PostgreSQL database dump
+--
+
+-- Dumped from database version 14.2 (Ubuntu 14.2-1.pgdg18.04+1)
+-- Dumped by pg_dump version 14.3
+
+-- Started on 2022-10-30 16:26:52
+
+SET statement_timeout = 0;
+SET lock_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SELECT pg_catalog.set_config('search_path', '', false);
+SET check_function_bodies = false;
+SET xmloption = content;
+SET client_min_messages = warning;
+SET row_security = off;
+
+--
+-- TOC entry 3 (class 3079 OID 16401)
+-- Name: pg_cron; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA public;
+
+
+--
+-- TOC entry 3452 (class 0 OID 0)
+-- Dependencies: 3
+-- Name: EXTENSION pg_cron; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_cron IS 'Job scheduler for PostgreSQL';
+
+
+--
+-- TOC entry 16 (class 2615 OID 16585)
+-- Name: metric_helpers; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+CREATE SCHEMA metric_helpers;
+
+
+ALTER SCHEMA metric_helpers OWNER TO postgres;
+
+--
+-- TOC entry 12 (class 2615 OID 16530)
+-- Name: user_management; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+CREATE SCHEMA user_management;
+
+
+ALTER SCHEMA user_management OWNER TO postgres;
+
+--
+-- TOC entry 14 (class 2615 OID 40976)
+-- Name: zmon_utils; Type: SCHEMA; Schema: -; Owner: postgres
+--
+
+CREATE SCHEMA zmon_utils;
+
+
+ALTER SCHEMA zmon_utils OWNER TO postgres;
+
+--
+-- TOC entry 5 (class 3079 OID 16515)
+-- Name: plpython3u; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS plpython3u WITH SCHEMA pg_catalog;
+
+
+--
+-- TOC entry 3457 (class 0 OID 0)
+-- Dependencies: 5
+-- Name: EXTENSION plpython3u; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION plpython3u IS 'PL/Python3U untrusted procedural language';
+
+
+--
+-- TOC entry 4 (class 3079 OID 16440)
+-- Name: file_fdw; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS file_fdw WITH SCHEMA public;
+
+
+--
+-- TOC entry 3458 (class 0 OID 0)
+-- Dependencies: 4
+-- Name: EXTENSION file_fdw; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION file_fdw IS 'foreign-data wrapper for flat file access';
+
+
+--
+-- TOC entry 2 (class 3079 OID 16388)
+-- Name: pg_auth_mon; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_auth_mon WITH SCHEMA public;
+
+
+--
+-- TOC entry 3459 (class 0 OID 0)
+-- Dependencies: 2
+-- Name: EXTENSION pg_auth_mon; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_auth_mon IS 'monitor connection attempts per user';
+
+
+--
+-- TOC entry 6 (class 3079 OID 16540)
+-- Name: pg_stat_statements; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_stat_statements WITH SCHEMA public;
+
+
+--
+-- TOC entry 3460 (class 0 OID 0)
+-- Dependencies: 6
+-- Name: EXTENSION pg_stat_statements; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_stat_statements IS 'track planning and execution statistics of all SQL statements executed';
+
+
+--
+-- TOC entry 7 (class 3079 OID 16565)
+-- Name: pg_stat_kcache; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS pg_stat_kcache WITH SCHEMA public;
+
+
+--
+-- TOC entry 3461 (class 0 OID 0)
+-- Dependencies: 7
+-- Name: EXTENSION pg_stat_kcache; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION pg_stat_kcache IS 'Kernel statistics gathering';
+
+
+--
+-- TOC entry 8 (class 3079 OID 16578)
+-- Name: set_user; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS set_user WITH SCHEMA public;
+
+
+--
+-- TOC entry 3462 (class 0 OID 0)
+-- Dependencies: 8
+-- Name: EXTENSION set_user; Type: COMMENT; Schema: -; Owner: 
+--
+
+COMMENT ON EXTENSION set_user IS 'similar to SET ROLE but with added logging';
+
+
+--
+-- TOC entry 981 (class 1247 OID 40982)
+-- Name: system_information; Type: TYPE; Schema: zmon_utils; Owner: postgres
+--
+
+CREATE TYPE zmon_utils.system_information AS (
+	parameter text,
+	setting text
+);
+
+
+ALTER TYPE zmon_utils.system_information OWNER TO postgres;
+
+--
+-- TOC entry 279 (class 1255 OID 16439)
+-- Name: schedule_in_database(text, text, text); Type: FUNCTION; Schema: cron; Owner: postgres
+--
+
+CREATE FUNCTION cron.schedule_in_database(p_schedule text, p_database text, p_command text) RETURNS bigint
+    LANGUAGE plpgsql
+    AS $$
+DECLARE
+    l_jobid bigint;
+BEGIN
+    IF NOT (SELECT rolcanlogin FROM pg_roles WHERE rolname = current_user)
+    THEN RAISE 'You cannot create a job using a role that cannot log in';
+    END IF;
+
+    SELECT schedule INTO l_jobid FROM cron.schedule(p_schedule, p_command);
+    UPDATE cron.job SET database = p_database, nodename = '' WHERE jobid = l_jobid;
+    RETURN l_jobid;
+END;
+$$;
+
+
+ALTER FUNCTION cron.schedule_in_database(p_schedule text, p_database text, p_command text) OWNER TO postgres;
+
+--
+-- TOC entry 294 (class 1255 OID 16591)
+-- Name: get_btree_bloat_approx(); Type: FUNCTION; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) RETURNS SETOF record
+    LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT current_database(), nspname AS schemaname, tblname, idxname, bs*(relpages)::bigint AS real_size,
+  bs*(relpages-est_pages)::bigint AS extra_size,
+  100 * (relpages-est_pages)::float / relpages AS extra_ratio,
+  fillfactor,
+  CASE WHEN relpages > est_pages_ff
+    THEN bs*(relpages-est_pages_ff)
+    ELSE 0
+  END AS bloat_size,
+  100 * (relpages-est_pages_ff)::float / relpages AS bloat_ratio,
+  is_na
+  -- , 100-(pst).avg_leaf_density AS pst_avg_bloat, est_pages, index_tuple_hdr_bm, maxalign, pagehdr, nulldatawidth, nulldatahdrwidth, reltuples, relpages -- (DEBUG INFO)
+FROM (
+  SELECT coalesce(1 +
+         ceil(reltuples/floor((bs-pageopqdata-pagehdr)/(4+nulldatahdrwidth)::float)), 0 -- ItemIdData size + computed avg size of a tuple (nulldatahdrwidth)
+      ) AS est_pages,
+      coalesce(1 +
+         ceil(reltuples/floor((bs-pageopqdata-pagehdr)*fillfactor/(100*(4+nulldatahdrwidth)::float))), 0
+      ) AS est_pages_ff,
+      bs, nspname, tblname, idxname, relpages, fillfactor, is_na
+      -- , pgstatindex(idxoid) AS pst, index_tuple_hdr_bm, maxalign, pagehdr, nulldatawidth, nulldatahdrwidth, reltuples -- (DEBUG INFO)
+  FROM (
+      SELECT maxalign, bs, nspname, tblname, idxname, reltuples, relpages, idxoid, fillfactor,
+            ( index_tuple_hdr_bm +
+                maxalign - CASE -- Add padding to the index tuple header to align on MAXALIGN
+                  WHEN index_tuple_hdr_bm%maxalign = 0 THEN maxalign
+                  ELSE index_tuple_hdr_bm%maxalign
+                END
+              + nulldatawidth + maxalign - CASE -- Add padding to the data to align on MAXALIGN
+                  WHEN nulldatawidth = 0 THEN 0
+                  WHEN nulldatawidth::integer%maxalign = 0 THEN maxalign
+                  ELSE nulldatawidth::integer%maxalign
+                END
+            )::numeric AS nulldatahdrwidth, pagehdr, pageopqdata, is_na
+            -- , index_tuple_hdr_bm, nulldatawidth -- (DEBUG INFO)
+      FROM (
+          SELECT n.nspname, ct.relname AS tblname, i.idxname, i.reltuples, i.relpages,
+              i.idxoid, i.fillfactor, current_setting('block_size')::numeric AS bs,
+              CASE -- MAXALIGN: 4 on 32bits, 8 on 64bits (and mingw32 ?)
+                WHEN version() ~ 'mingw32' OR version() ~ '64-bit|x86_64|ppc64|ia64|amd64' THEN 8
+                ELSE 4
+              END AS maxalign,
+              /* per page header, fixed size: 20 for 7.X, 24 for others */
+              24 AS pagehdr,
+              /* per page btree opaque data */
+              16 AS pageopqdata,
+              /* per tuple header: add IndexAttributeBitMapData if some cols are null-able */
+              CASE WHEN max(coalesce(s.stanullfrac,0)) = 0
+                  THEN 2 -- IndexTupleData size
+                  ELSE 2 + (( 32 + 8 - 1 ) / 8) -- IndexTupleData size + IndexAttributeBitMapData size ( max num filed per index + 8 - 1 /8)
+              END AS index_tuple_hdr_bm,
+              /* data len: we remove null values save space using it fractionnal part from stats */
+              sum( (1-coalesce(s.stanullfrac, 0)) * coalesce(s.stawidth, 1024)) AS nulldatawidth,
+              max( CASE WHEN a.atttypid = 'pg_catalog.name'::regtype THEN 1 ELSE 0 END ) > 0 AS is_na
+          FROM (
+              SELECT idxname, reltuples, relpages, tbloid, idxoid, fillfactor,
+                  CASE WHEN indkey[i]=0 THEN idxoid ELSE tbloid END AS att_rel,
+                  CASE WHEN indkey[i]=0 THEN i ELSE indkey[i] END AS att_pos
+              FROM (
+                  SELECT idxname, reltuples, relpages, tbloid, idxoid, fillfactor, indkey, generate_series(1,indnatts) AS i
+                  FROM (
+                      SELECT ci.relname AS idxname, ci.reltuples, ci.relpages, i.indrelid AS tbloid,
+                          i.indexrelid AS idxoid,
+                          coalesce(substring(
+                              array_to_string(ci.reloptions, ' ')
+                              from 'fillfactor=([0-9]+)')::smallint, 90) AS fillfactor,
+                          i.indnatts,
+                          string_to_array(textin(int2vectorout(i.indkey)),' ')::int[] AS indkey
+                      FROM pg_index i
+                      JOIN pg_class ci ON ci.oid=i.indexrelid
+                      WHERE ci.relam=(SELECT oid FROM pg_am WHERE amname = 'btree')
+                        AND ci.relpages > 0
+                  ) AS idx_data
+              ) AS idx_data_cross
+          ) i
+          JOIN pg_attribute a ON a.attrelid = i.att_rel
+                             AND a.attnum = i.att_pos
+          JOIN pg_statistic s ON s.starelid = i.att_rel
+                             AND s.staattnum = i.att_pos
+          JOIN pg_class ct ON ct.oid = i.tbloid
+          JOIN pg_namespace n ON ct.relnamespace = n.oid
+          GROUP BY 1,2,3,4,5,6,7,8,9,10
+      ) AS rows_data_stats
+  ) AS rows_hdr_pdg_stats
+) AS relation_stats;
+$$;
+
+
+ALTER FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) OWNER TO postgres;
+
+--
+-- TOC entry 298 (class 1255 OID 16586)
+-- Name: get_table_bloat_approx(); Type: FUNCTION; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) RETURNS SETOF record
+    LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT
+  current_database(),
+  schemaname,
+  tblname,
+  (bs*tblpages) AS real_size,
+  ((tblpages-est_tblpages)*bs) AS extra_size,
+  CASE WHEN tblpages - est_tblpages > 0
+    THEN 100 * (tblpages - est_tblpages)/tblpages::float
+    ELSE 0
+  END AS extra_ratio,
+  fillfactor,
+  CASE WHEN tblpages - est_tblpages_ff > 0
+    THEN (tblpages-est_tblpages_ff)*bs
+    ELSE 0
+  END AS bloat_size,
+  CASE WHEN tblpages - est_tblpages_ff > 0
+    THEN 100 * (tblpages - est_tblpages_ff)/tblpages::float
+    ELSE 0
+  END AS bloat_ratio,
+  is_na
+FROM (
+  SELECT ceil( reltuples / ( (bs-page_hdr)/tpl_size ) ) + ceil( toasttuples / 4 ) AS est_tblpages,
+    ceil( reltuples / ( (bs-page_hdr)*fillfactor/(tpl_size*100) ) ) + ceil( toasttuples / 4 ) AS est_tblpages_ff,
+    tblpages, fillfactor, bs, tblid, schemaname, tblname, heappages, toastpages, is_na
+    -- , tpl_hdr_size, tpl_data_size, pgstattuple(tblid) AS pst -- (DEBUG INFO)
+  FROM (
+    SELECT
+      ( 4 + tpl_hdr_size + tpl_data_size + (2*ma)
+        - CASE WHEN tpl_hdr_size%ma = 0 THEN ma ELSE tpl_hdr_size%ma END
+        - CASE WHEN ceil(tpl_data_size)::int%ma = 0 THEN ma ELSE ceil(tpl_data_size)::int%ma END
+      ) AS tpl_size, bs - page_hdr AS size_per_block, (heappages + toastpages) AS tblpages, heappages,
+      toastpages, reltuples, toasttuples, bs, page_hdr, tblid, schemaname, tblname, fillfactor, is_na
+      -- , tpl_hdr_size, tpl_data_size
+    FROM (
+      SELECT
+        tbl.oid AS tblid, ns.nspname AS schemaname, tbl.relname AS tblname, tbl.reltuples,
+        tbl.relpages AS heappages, coalesce(toast.relpages, 0) AS toastpages,
+        coalesce(toast.reltuples, 0) AS toasttuples,
+        coalesce(substring(
+          array_to_string(tbl.reloptions, ' ')
+          FROM 'fillfactor=([0-9]+)')::smallint, 100) AS fillfactor,
+        current_setting('block_size')::numeric AS bs,
+        CASE WHEN version()~'mingw32' OR version()~'64-bit|x86_64|ppc64|ia64|amd64' THEN 8 ELSE 4 END AS ma,
+        24 AS page_hdr,
+        23 + CASE WHEN MAX(coalesce(s.null_frac,0)) > 0 THEN ( 7 + count(s.attname) ) / 8 ELSE 0::int END
+           + CASE WHEN bool_or(att.attname = 'oid' and att.attnum < 0) THEN 4 ELSE 0 END AS tpl_hdr_size,
+        sum( (1-coalesce(s.null_frac, 0)) * coalesce(s.avg_width, 0) ) AS tpl_data_size,
+        bool_or(att.atttypid = 'pg_catalog.name'::regtype)
+          OR sum(CASE WHEN att.attnum > 0 THEN 1 ELSE 0 END) <> count(s.attname) AS is_na
+      FROM pg_attribute AS att
+        JOIN pg_class AS tbl ON att.attrelid = tbl.oid
+        JOIN pg_namespace AS ns ON ns.oid = tbl.relnamespace
+        LEFT JOIN pg_stats AS s ON s.schemaname=ns.nspname
+          AND s.tablename = tbl.relname AND s.inherited=false AND s.attname=att.attname
+        LEFT JOIN pg_class AS toast ON tbl.reltoastrelid = toast.oid
+      WHERE NOT att.attisdropped
+        AND tbl.relkind = 'r'
+      GROUP BY 1,2,3,4,5,6,7,8,9,10
+      ORDER BY 2,3
+    ) AS s
+  ) AS s2
+) AS s3 WHERE schemaname NOT LIKE 'information_schema';
+$$;
+
+
+ALTER FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) OWNER TO postgres;
+
+--
+-- TOC entry 295 (class 1255 OID 16600)
+-- Name: pg_stat_statements(boolean); Type: FUNCTION; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE FUNCTION metric_helpers.pg_stat_statements(showtext boolean) RETURNS SETOF public.pg_stat_statements
+    LANGUAGE sql IMMUTABLE STRICT SECURITY DEFINER
+    AS $$
+  SELECT * FROM public.pg_stat_statements(showtext);
+$$;
+
+
+ALTER FUNCTION metric_helpers.pg_stat_statements(showtext boolean) OWNER TO postgres;
+
+--
+-- TOC entry 291 (class 1255 OID 16532)
+-- Name: create_application_user(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_application_user(username text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+DECLARE
+    pw text;
+BEGIN
+    SELECT user_management.random_password(20) INTO pw;
+    EXECUTE format($$ CREATE USER %I WITH PASSWORD %L $$, username, pw);
+    RETURN pw;
+END
+$_$;
+
+
+ALTER FUNCTION user_management.create_application_user(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3476 (class 0 OID 0)
+-- Dependencies: 291
+-- Name: FUNCTION create_application_user(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_application_user(username text) IS 'Creates a user that can login, sets the password to a strong random one,
+which is then returned';
+
+
+--
+-- TOC entry 268 (class 1255 OID 16535)
+-- Name: create_application_user_or_change_password(text, text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_application_user_or_change_password(username text, password text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    PERFORM 1 FROM pg_roles WHERE rolname = username;
+
+    IF FOUND
+    THEN
+        EXECUTE format($$ ALTER ROLE %I WITH PASSWORD %L $$, username, password);
+    ELSE
+        EXECUTE format($$ CREATE USER %I WITH PASSWORD %L $$, username, password);
+    END IF;
+END
+$_$;
+
+
+ALTER FUNCTION user_management.create_application_user_or_change_password(username text, password text) OWNER TO postgres;
+
+--
+-- TOC entry 3478 (class 0 OID 0)
+-- Dependencies: 268
+-- Name: FUNCTION create_application_user_or_change_password(username text, password text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_application_user_or_change_password(username text, password text) IS 'USE THIS ONLY IN EMERGENCY!  The password will appear in the DB logs.
+Creates a user that can login, sets the password to the one provided.
+If the user already exists, sets its password.';
+
+
+--
+-- TOC entry 292 (class 1255 OID 16534)
+-- Name: create_role(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_role(rolename text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    -- set ADMIN to the admin user, so every member of admin can GRANT these roles to each other
+    EXECUTE format($$ CREATE ROLE %I WITH ADMIN admin $$, rolename);
+END;
+$_$;
+
+
+ALTER FUNCTION user_management.create_role(rolename text) OWNER TO postgres;
+
+--
+-- TOC entry 3480 (class 0 OID 0)
+-- Dependencies: 292
+-- Name: FUNCTION create_role(rolename text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_role(rolename text) IS 'Creates a role that cannot log in, but can be used to set up fine-grained privileges';
+
+
+--
+-- TOC entry 255 (class 1255 OID 16533)
+-- Name: create_user(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.create_user(username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    EXECUTE format($$ CREATE USER %I IN ROLE zalandos, admin $$, username);
+    EXECUTE format($$ ALTER ROLE %I SET log_statement TO 'all' $$, username);
+END;
+$_$;
+
+
+ALTER FUNCTION user_management.create_user(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3482 (class 0 OID 0)
+-- Dependencies: 255
+-- Name: FUNCTION create_user(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.create_user(username text) IS 'Creates a user that is supposed to be a human, to be authenticated without a password';
+
+
+--
+-- TOC entry 269 (class 1255 OID 16538)
+-- Name: drop_role(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.drop_role(username text) RETURNS void
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT user_management.drop_user(username);
+$$;
+
+
+ALTER FUNCTION user_management.drop_role(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3484 (class 0 OID 0)
+-- Dependencies: 269
+-- Name: FUNCTION drop_role(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.drop_role(username text) IS 'Drop a human or application user.  Intended for cleanup (either after team changes or mistakes in role setup).
+Roles (= users) that own database objects cannot be dropped.';
+
+
+--
+-- TOC entry 270 (class 1255 OID 16537)
+-- Name: drop_user(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.drop_user(username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    EXECUTE format($$ DROP ROLE %I $$, username);
+END
+$_$;
+
+
+ALTER FUNCTION user_management.drop_user(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3486 (class 0 OID 0)
+-- Dependencies: 270
+-- Name: FUNCTION drop_user(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.drop_user(username text) IS 'Drop a human or application user.  Intended for cleanup (either after team changes or mistakes in role setup).
+Roles (= users) that own database objects cannot be dropped.';
+
+
+--
+-- TOC entry 293 (class 1255 OID 16531)
+-- Name: random_password(integer); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.random_password(length integer) RETURNS text
+    LANGUAGE sql
+    SET search_path TO 'pg_catalog'
+    AS $$
+WITH chars (c) AS (
+    SELECT chr(33)
+    UNION ALL
+    SELECT chr(i) FROM generate_series (35, 38) AS t (i)
+    UNION ALL
+    SELECT chr(i) FROM generate_series (42, 90) AS t (i)
+    UNION ALL
+    SELECT chr(i) FROM generate_series (97, 122) AS t (i)
+),
+bricks (b) AS (
+    -- build a pool of chars (the size will be the number of chars above times length)
+    -- and shuffle it
+    SELECT c FROM chars, generate_series(1, length) ORDER BY random()
+)
+SELECT substr(string_agg(b, ''), 1, length) FROM bricks;
+$$;
+
+
+ALTER FUNCTION user_management.random_password(length integer) OWNER TO postgres;
+
+--
+-- TOC entry 271 (class 1255 OID 16536)
+-- Name: revoke_admin(text); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.revoke_admin(username text) RETURNS void
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+BEGIN
+    EXECUTE format($$ REVOKE admin FROM %I $$, username);
+END
+$_$;
+
+
+ALTER FUNCTION user_management.revoke_admin(username text) OWNER TO postgres;
+
+--
+-- TOC entry 3488 (class 0 OID 0)
+-- Dependencies: 271
+-- Name: FUNCTION revoke_admin(username text); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.revoke_admin(username text) IS 'Use this function to make a human user less privileged,
+ie. when you want to grant someone read privileges only';
+
+
+--
+-- TOC entry 267 (class 1255 OID 16539)
+-- Name: terminate_backend(integer); Type: FUNCTION; Schema: user_management; Owner: postgres
+--
+
+CREATE FUNCTION user_management.terminate_backend(pid integer) RETURNS boolean
+    LANGUAGE sql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+SELECT pg_terminate_backend(pid);
+$$;
+
+
+ALTER FUNCTION user_management.terminate_backend(pid integer) OWNER TO postgres;
+
+--
+-- TOC entry 3490 (class 0 OID 0)
+-- Dependencies: 267
+-- Name: FUNCTION terminate_backend(pid integer); Type: COMMENT; Schema: user_management; Owner: postgres
+--
+
+COMMENT ON FUNCTION user_management.terminate_backend(pid integer) IS 'When there is a process causing harm, you can kill it using this function.  Get the pid from pg_stat_activity
+(be careful to match the user name (usename) and the query, in order not to kill innocent kittens) and pass it to terminate_backend()';
+
+
+--
+-- TOC entry 297 (class 1255 OID 40984)
+-- Name: get_database_cluster_information(); Type: FUNCTION; Schema: zmon_utils; Owner: postgres
+--
+
+CREATE FUNCTION zmon_utils.get_database_cluster_information() RETURNS TABLE(parameter text, setting text)
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $_$
+DECLARE
+   wal_segment          BIGINT;
+   wal_offset           BIGINT;
+   wal_multiplier       BIGINT;
+   wal_delay_seconds    BIGINT;
+   in_recovery          BOOLEAN;
+   xlog_location_string TEXT;
+   receive_location     TEXT;
+   server_version_num   INTEGER;
+   nosync               INTEGER;
+BEGIN
+  server_version_num := current_setting('server_version_num')::integer;
+  SELECT pg_is_in_recovery() INTO in_recovery;
+  IF server_version_num >= 100000
+  THEN
+    SELECT CASE WHEN in_recovery THEN pg_last_wal_replay_lsn()
+           ELSE pg_current_wal_lsn()
+           END INTO xlog_location_string;
+    SELECT pg_last_wal_receive_lsn() INTO receive_location;
+  ELSE
+    SELECT CASE WHEN in_recovery THEN pg_last_xlog_replay_location()
+           ELSE pg_current_xlog_location()
+           END INTO xlog_location_string;
+    SELECT pg_last_xlog_receive_location() INTO receive_location;
+  END IF;
+  SELECT ('x'||lpad(split_part(xlog_location_string, '/', 1), 16, '0'))::bit(64)::bigint INTO wal_segment;
+  SELECT ('x'||lpad(split_part(xlog_location_string, '/', 2), 16, '0'))::bit(64)::bigint INTO wal_offset;
+  SELECT 1 FROM pg_ls_dir('.') as t(name) WHERE name = 'dontsync' INTO nosync;
+  IF server_version_num >= 90300
+  THEN
+    wal_multiplier = CAST(x'FFFFFFFF' as bigint);
+  ELSE
+    wal_multiplier = CAST(x'FF000000' as bigint);
+  END IF;
+
+  IF server_version_num >= 90100 AND in_recovery
+  THEN
+    wal_delay_seconds := extract(epoch from now() - pg_last_xact_replay_timestamp())::bigint;
+  END IF;
+
+  RETURN QUERY
+  SELECT 'zmon_utils_version', '11'
+   UNION ALL
+  SELECT 'server_version_num', server_version_num::text
+   UNION ALL
+  SELECT s.name, s.setting
+    FROM pg_settings as s
+   WHERE name in ('archive_mode',
+                  'archive_command',
+                  'archive_timeout',
+                  'checkpoint_segments',
+                  'listen_address',      -- connection
+                  'port',                -- connection
+                  'ssl',                 -- connection
+                  'max_connections',     -- connection
+                  'data_directory',      -- disk
+                  'fsync',               -- disk
+                  'full_page_writes',
+                  'hba_file',
+                  'ident_file',
+                  'hot_standby',
+                  'log_destination',
+                  'log_directory',
+                  'log_filename',
+                  'shared_buffers',
+                  'synchronous_commit'
+                 )
+   UNION ALL
+  SELECT 'cluster_name', COALESCE(CASE WHEN server_version_num >= 90500 THEN current_setting('cluster_name') ELSE NULL END, substring(s.setting from E'/pgsql_([^/]+)/[^/]+/data$'))
+    FROM pg_settings as s
+   WHERE s.name = 'data_directory'
+   UNION ALL
+  SELECT 'defined_databases', string_agg(quote_ident(datname), E'\n')
+    FROM pg_database
+   WHERE datname != 'postgres'
+     AND NOT datistemplate
+     AND datallowconn
+   UNION ALL
+  SELECT 'is_in_recovery' as name, in_recovery::text as setting
+    UNION ALL
+  SELECT 'wal_bytes_from_zero' as name, CAST(wal_segment::numeric * wal_multiplier + wal_offset AS TEXT) as setting
+    UNION ALL
+  SELECT 'wal_delay_seconds' as name, wal_delay_seconds::text
+    UNION ALL
+  SELECT 'is_streaming' as name, CAST(receive_location IS NOT NULL AND in_recovery AS TEXT) as setting
+    UNION ALL
+  SELECT 'archive_nosync' as name, CAST(nosync IS NOT NULL AS TEXT) as setting;
+  -- pg_stat_activity column names differ depending on server version
+  IF server_version_num >= 90600 THEN
+    RETURN QUERY
+    SELECT a.name, a.setting
+      FROM unnest((select array[('active_connections'::text,
+                                 count(CASE WHEN state = 'active' THEN 1 END)::text),
+                                ('idle_in_transaction_connections'::text,
+                                 count(CASE WHEN state = 'idle in transaction' THEN 1 END)::text),
+                                ('idle_in_transaction_max_age'::text,
+                                 coalesce(max(CASE WHEN state = 'idle in transaction' THEN extract(epoch from statement_timestamp() - state_change) END), 0)::text),
+                                ('locked_connections'::text,
+                                 count(CASE WHEN wait_event_type = 'Lock' THEN 1 END)::text),
+                                ('current_connections'::text,
+                                 count(1)::text),
+                                ('transaction_max_age'::text,
+                                 -- exclude autovacuum transactions
+                                 coalesce(extract(epoch from statement_timestamp() - min(CASE WHEN query like 'autovacuum:%' THEN NULL ELSE xact_start END)),0)::text)
+                               ]
+                     from pg_stat_activity
+                 )) AS a (name text, setting text);
+  ELSE
+    RETURN QUERY
+    SELECT a.name, a.setting
+      FROM unnest((select array[('active_connections'::text,
+                                 count(CASE WHEN state = 'active' THEN 1 END)::text),
+                                ('idle_in_transaction_connections'::text,
+                                 count(CASE WHEN state = 'idle in transaction' THEN 1 END)::text),
+                                ('idle_in_transaction_max_age'::text,
+                                 coalesce(max(CASE WHEN state = 'idle in transaction' THEN extract(epoch from statement_timestamp() - state_change) END), 0)::text),
+                                ('locked_connections'::text,
+                                 count(CASE WHEN waiting THEN 1 END)::text),
+                                ('current_connections'::text,
+                                 count(1)::text),
+                                ('transaction_max_age'::text,
+                                 -- exclude autovacuum transactions
+                                 coalesce(extract(epoch from statement_timestamp() - min(CASE WHEN query like 'autovacuum:%' THEN NULL ELSE xact_start END)),0)::text)
+                               ]
+                     from pg_stat_activity
+                 )) AS a (name text, setting text);
+  END IF;
+END
+$_$;
+
+
+ALTER FUNCTION zmon_utils.get_database_cluster_information() OWNER TO postgres;
+
+--
+-- TOC entry 253 (class 1255 OID 40986)
+-- Name: get_database_cluster_system_information(); Type: FUNCTION; Schema: zmon_utils; Owner: postgres
+--
+
+CREATE FUNCTION zmon_utils.get_database_cluster_system_information() RETURNS SETOF zmon_utils.system_information
+    LANGUAGE plpython3u SECURITY DEFINER
+    SET search_path TO 'pg_catalog'
+    AS $$
+"""
+NOTE: this is python 2.5 compatible code
+
+This function returns the system related data of the database cluster related disks.
+It can be slow, so do not call it too often
+
+load.1
+load.5
+load.15
+cpu.count
+
+xlog.location
+xlog.size
+xlog.device.name
+xlog.device.total
+xlog.device.used
+xlog.devide.free
+
+tablespace.<tablespacename>.size
+tablespace.<tablespacename>.device
+# for example
+tablespace.pg_default.size
+tablespace.pg_default.location
+tablespace.pg_default.device
+
+memory.commmit.diff
+
+platform.release
+platform.version
+platform.kernel
+
+vm.overcommit_memory
+vm.overcommit_ratio
+
+"""
+import os
+import platform
+
+
+def get_mount_point(pathname):
+    "Get the mount point of the filesystem containing pathname"
+    pathname = os.path.normcase(os.path.realpath(pathname))
+    parent_device = path_device = os.stat(pathname).st_dev
+    while parent_device == path_device:
+        mount_point = pathname
+        pathname = os.path.dirname(pathname)
+        if pathname == mount_point:
+            break
+        parent_device = os.stat(pathname).st_dev
+    return mount_point
+
+
+def get_mounted_device(pathname):
+    "Get the device mounted at pathname"
+    # uses "/proc/mounts"
+    pathname = os.path.normcase(pathname)  # might be unnecessary here
+    try:
+        ifp = open("/proc/mounts", "r")
+        try:
+            for line in ifp:
+                fields = line.rstrip('\n').split()
+                # note that line above assumes that
+                # no mount points contain whitespace
+                if fields[1] == pathname:
+                    return fields[0]
+        finally:
+            ifp.close()
+    except EnvironmentError:
+        pass
+    return None  # explicit
+
+
+def get_fs_space(pathname):
+    "Get the free space of the filesystem containing pathname"
+    stat = os.statvfs(pathname)
+    # use f_bfree for superuser, or f_bavail if filesystem
+    # has reserved space for superuser
+    total = stat.f_blocks * stat.f_bsize
+    free = stat.f_bavail * stat.f_bsize
+    return total, free,
+
+
+def get_dir_size(pathname):
+    """ Get the total size of the directory in bytes.
+        Ignore files located on different partitions.
+    """
+    size = 0
+    folders = [pathname]
+    root_dev = os.lstat(pathname).st_dev
+    while len(folders):
+        c = folders.pop()
+        for e in os.listdir(c):
+            e = os.path.join(c, e)
+            try:
+                st = os.lstat(e)
+                # skip data on different partition
+                if st.st_dev != root_dev:
+                    continue
+                mode = st.st_mode & 0xf000  # S_IFMT
+                if mode == 0x4000:  # S_IFDIR
+                    folders.append(e)
+                    size += st.st_size
+                if mode == 0x8000:  # S_IFREG
+                    size += st.st_size
+            except:
+                # probably the file was removed already, so just skip it
+                pass
+    return size
+
+
+def collect_tablespaces_stats(data_directory):
+    """ fetch tablespaces names and oid - the latter is necessary
+        to get the sizes information from the file system
+    """
+    result = {}
+    ts = {}
+    stats = {}
+    if "stmt_tablespaces" in SD:
+        plan = SD['stmt_tablespaces']
+    else:
+        plan = plpy.prepare("SELECT oid, spcname FROM pg_catalog.pg_tablespace")
+        SD['stmt_tablespaces'] = plan
+
+    rv = plpy.execute(plan)
+    for r in rv:
+        ts[r["oid"]] = r["spcname"]
+    # get to the filesystem and fetch sizes and devices
+    ts_root = os.path.join(data_directory, 'pg_tblspc')
+    for oid in ts:
+        # special cases - pg_global and pg_default. We are not interested in pg_global,
+        # and will treat pg_default simply as datadir
+        if ts[oid] == 'pg_default':
+            stats = collect_directory_stats(data_directory, "tablespace.%s" % ts[oid])
+        elif ts[oid] != 'pg_global':
+            stats = collect_directory_stats(os.path.join(ts_root, oid), "tablespace.%s" % ts[oid])
+        result.update(stats)
+    return result
+
+
+def get_platform_information():
+    result = {}
+    result['platform.version'] = platform.version()
+    result['platform.release'] = platform.release()
+    result['platform.kernel']  = (platform.release() or '').split('-')[0]
+
+    return result
+
+
+def collect_directory_stats(path, prefix):
+    """ Collect real location, size, mount device, total and free space on a device for a dir """
+    stat = {}
+    location = os.path.realpath(path)
+    stat[prefix+'.location'] = location
+    mount_point = get_mount_point(location)
+    # do we really need roots here?
+    stat[prefix+'.device'] = get_mounted_device(mount_point)
+    stat[prefix+'.total'], stat[prefix+'.free'] = get_fs_space(mount_point)
+    # might be slow due to traversal of subdirectories
+    stat[prefix+'.size'] = get_dir_size(location)
+    return stat
+
+
+def get_load_average():
+    return dict(zip(('load.1', 'load.5', 'load.15'), os.getloadavg()))
+
+
+def get_number_of_cpus():
+    try:
+        number_of_cpus = open('/proc/cpuinfo').read().count('processor\t:')
+        if number_of_cpus > 0:
+            return {'cpu.count': number_of_cpus}
+    except IOError:
+        # on other system, basically on Solaris, this file doesn't exist
+        pass
+
+
+def get_memory_info():
+    "Get the memory info"
+    # information is obtained from /proc/meminfo
+    mem_info = {}
+    expected_keys = { 'MemTotal':    'memory.total',
+                      'MemFree':     'memory.free',
+                      'Buffers':     'memory.buffers',
+                      'Cached':      'memory.cached',
+                      'SwapTotal':   'memory.swap.total',
+                      'SwapFree':    'memory.swap.free',
+                      'Dirty':       'memory.dirty',
+                      'CommitLimit': 'memory.commit.limit',
+                      'Committed_AS':'memory.commit.as',
+                    }
+    expected_key_count = len(expected_keys)
+    try:
+        ifp = open("/proc/meminfo", "r")
+        try:
+            for line in ifp:
+                meminfo_key, value, = line.rstrip('\n').split(':')
+                key = expected_keys.get(meminfo_key)
+                if key:
+                    mem_info[key] = int(value.strip(' kB')) * 1024 # we use bytes everywhere
+                    if len(mem_info) == expected_key_count:
+                        break
+        finally:
+            ifp.close()
+    except EnvironmentError:
+        return None
+    commit_limit = mem_info['memory.commit.limit']
+    committed_as = mem_info['memory.commit.as']
+    if commit_limit and committed_as:
+        mem_info['memory.commit.diff'] = commit_limit - committed_as
+    return mem_info
+
+def get_vm_info():
+    "get information about virtual memory configuration, specifically overcommit settings"
+    vm_info = {}
+    file_keys = { '/proc/sys/vm/overcommit_memory': 'vm.overcommit_memory',
+                  '/proc/sys/vm/overcommit_ratio' : 'vm.overcommit_ratio'
+                }
+    try:
+        for fname, kname in file_keys.items():
+            try:
+                fp = open(fname, 'r')
+                val = int(fp.read().strip())
+                vm_info[kname] = val
+            finally:
+                fp.close()
+    except EnvironmentError:
+        pass
+    return vm_info
+
+if "stmt_settings" in SD:
+    plan = SD["stmt_settings"]
+else:
+    plan = plpy.prepare("SELECT name, setting FROM pg_catalog.pg_settings WHERE name in ('data_directory', 'log_directory', 'server_version_num')")
+    SD["stmt_settings"] = plan
+
+rv = plpy.execute(plan)
+s = {}
+for r in rv:
+    s[r["name"]] = r["setting"]
+
+data_directory = s["data_directory"]
+log_directory = s["log_directory"] = os.path.join(data_directory, s["log_directory"])
+pg_tblspc = os.path.join(data_directory, "pg_tblspc")
+pg_xlog = os.path.join(data_directory, "pg_xlog" if int(s["server_version_num"]) < 100000 else "pg_wal")
+
+result = {}
+
+# get tablespaces (including pg_default)
+ts_stats = collect_tablespaces_stats(data_directory)
+if len(ts_stats) > 0:
+    result.update(ts_stats)
+
+#get xlog and log directories
+for (path, prefix) in ((pg_xlog, 'xlog'), (log_directory, 'log')):
+    if os.path.isdir(path):
+        stats = collect_directory_stats(path, prefix)
+        if len(stats) > 0:
+            result.update(stats)
+
+result.update(get_platform_information())
+result.update(get_load_average())
+result.update(get_number_of_cpus())
+mem_info = get_memory_info()
+if mem_info:
+    result.update(mem_info)
+vm_info = get_vm_info()
+if vm_info:
+    result.update(vm_info)
+
+return result.items()
+
+$$;
+
+
+ALTER FUNCTION zmon_utils.get_database_cluster_system_information() OWNER TO postgres;
+
+--
+-- TOC entry 2185 (class 1417 OID 16444)
+-- Name: pglog; Type: SERVER; Schema: -; Owner: postgres
+--
+
+CREATE SERVER pglog FOREIGN DATA WRAPPER file_fdw;
+
+
+ALTER SERVER pglog OWNER TO postgres;
+
+--
+-- TOC entry 247 (class 1259 OID 16596)
+-- Name: index_bloat; Type: VIEW; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE VIEW metric_helpers.index_bloat AS
+ SELECT get_btree_bloat_approx.i_database,
+    get_btree_bloat_approx.i_schema_name,
+    get_btree_bloat_approx.i_table_name,
+    get_btree_bloat_approx.i_index_name,
+    get_btree_bloat_approx.i_real_size,
+    get_btree_bloat_approx.i_extra_size,
+    get_btree_bloat_approx.i_extra_ratio,
+    get_btree_bloat_approx.i_fill_factor,
+    get_btree_bloat_approx.i_bloat_size,
+    get_btree_bloat_approx.i_bloat_ratio,
+    get_btree_bloat_approx.i_is_na
+   FROM metric_helpers.get_btree_bloat_approx() get_btree_bloat_approx(i_database, i_schema_name, i_table_name, i_index_name, i_real_size, i_extra_size, i_extra_ratio, i_fill_factor, i_bloat_size, i_bloat_ratio, i_is_na);
+
+
+ALTER TABLE metric_helpers.index_bloat OWNER TO postgres;
+
+--
+-- TOC entry 248 (class 1259 OID 16601)
+-- Name: pg_stat_statements; Type: VIEW; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE VIEW metric_helpers.pg_stat_statements AS
+ SELECT pg_stat_statements.userid,
+    pg_stat_statements.dbid,
+    pg_stat_statements.toplevel,
+    pg_stat_statements.queryid,
+    pg_stat_statements.query,
+    pg_stat_statements.plans,
+    pg_stat_statements.total_plan_time,
+    pg_stat_statements.min_plan_time,
+    pg_stat_statements.max_plan_time,
+    pg_stat_statements.mean_plan_time,
+    pg_stat_statements.stddev_plan_time,
+    pg_stat_statements.calls,
+    pg_stat_statements.total_exec_time,
+    pg_stat_statements.min_exec_time,
+    pg_stat_statements.max_exec_time,
+    pg_stat_statements.mean_exec_time,
+    pg_stat_statements.stddev_exec_time,
+    pg_stat_statements.rows,
+    pg_stat_statements.shared_blks_hit,
+    pg_stat_statements.shared_blks_read,
+    pg_stat_statements.shared_blks_dirtied,
+    pg_stat_statements.shared_blks_written,
+    pg_stat_statements.local_blks_hit,
+    pg_stat_statements.local_blks_read,
+    pg_stat_statements.local_blks_dirtied,
+    pg_stat_statements.local_blks_written,
+    pg_stat_statements.temp_blks_read,
+    pg_stat_statements.temp_blks_written,
+    pg_stat_statements.blk_read_time,
+    pg_stat_statements.blk_write_time,
+    pg_stat_statements.wal_records,
+    pg_stat_statements.wal_fpi,
+    pg_stat_statements.wal_bytes
+   FROM metric_helpers.pg_stat_statements(true) pg_stat_statements(userid, dbid, toplevel, queryid, query, plans, total_plan_time, min_plan_time, max_plan_time, mean_plan_time, stddev_plan_time, calls, total_exec_time, min_exec_time, max_exec_time, mean_exec_time, stddev_exec_time, rows, shared_blks_hit, shared_blks_read, shared_blks_dirtied, shared_blks_written, local_blks_hit, local_blks_read, local_blks_dirtied, local_blks_written, temp_blks_read, temp_blks_written, blk_read_time, blk_write_time, wal_records, wal_fpi, wal_bytes);
+
+
+ALTER TABLE metric_helpers.pg_stat_statements OWNER TO postgres;
+
+--
+-- TOC entry 246 (class 1259 OID 16587)
+-- Name: table_bloat; Type: VIEW; Schema: metric_helpers; Owner: postgres
+--
+
+CREATE VIEW metric_helpers.table_bloat AS
+ SELECT get_table_bloat_approx.t_database,
+    get_table_bloat_approx.t_schema_name,
+    get_table_bloat_approx.t_table_name,
+    get_table_bloat_approx.t_real_size,
+    get_table_bloat_approx.t_extra_size,
+    get_table_bloat_approx.t_extra_ratio,
+    get_table_bloat_approx.t_fill_factor,
+    get_table_bloat_approx.t_bloat_size,
+    get_table_bloat_approx.t_bloat_ratio,
+    get_table_bloat_approx.t_is_na
+   FROM metric_helpers.get_table_bloat_approx() get_table_bloat_approx(t_database, t_schema_name, t_table_name, t_real_size, t_extra_size, t_extra_ratio, t_fill_factor, t_bloat_size, t_bloat_ratio, t_is_na);
+
+
+ALTER TABLE metric_helpers.table_bloat OWNER TO postgres;
+
+SET default_tablespace = '';
+
+SET default_table_access_method = heap;
+
+--
+-- TOC entry 225 (class 1259 OID 16445)
+-- Name: postgres_log; Type: TABLE; Schema: public; Owner: postgres
+--
+
+CREATE TABLE public.postgres_log (
+    log_time timestamp(3) with time zone,
+    user_name text,
+    database_name text,
+    process_id integer,
+    connection_from text,
+    session_id text NOT NULL,
+    session_line_num bigint NOT NULL,
+    command_tag text,
+    session_start_time timestamp with time zone,
+    virtual_transaction_id text,
+    transaction_id bigint,
+    error_severity text,
+    sql_state_code text,
+    message text,
+    detail text,
+    hint text,
+    internal_query text,
+    internal_query_pos integer,
+    context text,
+    query text,
+    query_pos integer,
+    location text,
+    application_name text,
+    backend_type text,
+    leader_pid integer,
+    query_id bigint,
+    CONSTRAINT postgres_log_check CHECK (false) NO INHERIT
+);
+
+
+ALTER TABLE public.postgres_log OWNER TO postgres;
+
+--
+-- TOC entry 226 (class 1259 OID 16451)
+-- Name: postgres_log_0; Type: FOREIGN TABLE; Schema: public; Owner: postgres
+--
+
+CREATE FOREIGN TABLE public.postgres_log_0 (
+)
+INHERITS (public.postgres_log)
+SERVER pglog
+OPTIONS (
+    filename '../pg_log/postgresql-0.csv',
+    format 'csv',
+    header 'false'
+);
+
+
+ALTER FOREIGN TABLE public.postgres_log_0 OWNER TO postgres;
+
+--
+-- TOC entry 227 (class 1259 OID 16454)
+-- Name: failed_authentication_0; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.failed_authentication_0 WITH (security_barrier='true') AS
+ SELECT postgres_log_0.log_time,
+    postgres_log_0.user_name,
+    postgres_log_0.database_name,
+    postgres_log_0.process_id,
+    postgres_log_0.connection_from,
+    postgres_log_0.session_id,
+    postgres_log_0.session_line_num,
+    postgres_log_0.command_tag,
+    postgres_log_0.session_start_time,
+    postgres_log_0.virtual_transaction_id,
+    postgres_log_0.transaction_id,
+    postgres_log_0.error_severity,
+    postgres_log_0.sql_state_code,
+    postgres_log_0.message,
+    postgres_log_0.detail,
+    postgres_log_0.hint,
+    postgres_log_0.internal_query,
+    postgres_log_0.internal_query_pos,
+    postgres_log_0.context,
+    postgres_log_0.query,
+    postgres_log_0.query_pos,
+    postgres_log_0.location,
+    postgres_log_0.application_name,
+    postgres_log_0.backend_type,
+    postgres_log_0.leader_pid,
+    postgres_log_0.query_id
+   FROM public.postgres_log_0
+  WHERE ((postgres_log_0.command_tag = 'authentication'::text) AND (postgres_log_0.error_severity = 'FATAL'::text));
+
+
+ALTER TABLE public.failed_authentication_0 OWNER TO postgres;
+
+--
+-- TOC entry 228 (class 1259 OID 16459)
+-- Name: postgres_log_1; Type: FOREIGN TABLE; Schema: public; Owner: postgres
+--
+
+CREATE FOREIGN TABLE public.postgres_log_1 (
+)
+INHERITS (public.postgres_log)
+SERVER pglog
+OPTIONS (
+    filename '../pg_log/postgresql-1.csv',
+    format 'csv',
+    header 'false'
+);
+
+
+ALTER FOREIGN TABLE public.postgres_log_1 OWNER TO postgres;
+
+--
+-- TOC entry 229 (class 1259 OID 16462)
+-- Name: failed_authentication_1; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.failed_authentication_1 WITH (security_barrier='true') AS
+ SELECT postgres_log_1.log_time,
+    postgres_log_1.user_name,
+    postgres_log_1.database_name,
+    postgres_log_1.process_id,
+    postgres_log_1.connection_from,
+    postgres_log_1.session_id,
+    postgres_log_1.session_line_num,
+    postgres_log_1.command_tag,
+    postgres_log_1.session_start_time,
+    postgres_log_1.virtual_transaction_id,
+    postgres_log_1.transaction_id,
+    postgres_log_1.error_severity,
+    postgres_log_1.sql_state_code,
+    postgres_log_1.message,
+    postgres_log_1.detail,
+    postgres_log_1.hint,
+    postgres_log_1.internal_query,
+    postgres_log_1.internal_query_pos,
+    postgres_log_1.context,
+    postgres_log_1.query,
+    postgres_log_1.query_pos,
+    postgres_log_1.location,
+    postgres_log_1.application_name,
+    postgres_log_1.backend_type,
+    postgres_log_1.leader_pid,
+    postgres_log_1.query_id
+   FROM public.postgres_log_1
+  WHERE ((postgres_log_1.command_tag = 'authentication'::text) AND (postgres_log_1.error_severity = 'FATAL'::text));
+
+
+ALTER TABLE public.failed_authentication_1 OWNER TO postgres;
+
+--
+-- TOC entry 230 (class 1259 OID 16467)
+-- Name: postgres_log_2; Type: FOREIGN TABLE; Schema: public; Owner: postgres
+--
+
+CREATE FOREIGN TABLE public.postgres_log_2 (
+)
+INHERITS (public.postgres_log)
+SERVER pglog
+OPTIONS (
+    filename '../pg_log/postgresql-2.csv',
+    format 'csv',
+    header 'false'
+);
+
+
+ALTER FOREIGN TABLE public.postgres_log_2 OWNER TO postgres;
+
+--
+-- TOC entry 231 (class 1259 OID 16470)
+-- Name: failed_authentication_2; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.failed_authentication_2 WITH (security_barrier='true') AS
+ SELECT postgres_log_2.log_time,
+    postgres_log_2.user_name,
+    postgres_log_2.database_name,
+    postgres_log_2.process_id,
+    postgres_log_2.connection_from,
+    postgres_log_2.session_id,
+    postgres_log_2.session_line_num,
+    postgres_log_2.command_tag,
+    postgres_log_2.session_start_time,
+    postgres_log_2.virtual_transaction_id,
+    postgres_log_2.transaction_id,
+    postgres_log_2.error_severity,
+    postgres_log_2.sql_state_code,
+    postgres_log_2.message,
+    postgres_log_2.detail,
+    postgres_log_2.hint,
+    postgres_log_2.internal_query,
+    postgres_log_2.internal_query_pos,
+    postgres_log_2.context,
+    postgres_log_2.query,
+    postgres_log_2.query_pos,
+    postgres_log_2.location,
+    postgres_log_2.application_name,
+    postgres_log_2.backend_type,
+    postgres_log_2.leader_pid,
+    postgres_log_2.query_id
+   FROM public.postgres_log_2
+  WHERE ((postgres_log_2.command_tag = 'authentication'::text) AND (postgres_log_2.error_severity = 'FATAL'::text));
+
+
+ALTER TABLE public.failed_authentication_2 OWNER TO postgres;
+
+--
+-- TOC entry 232 (class 1259 OID 16475)
+-- Name: postgres_log_3; Type: FOREIGN TABLE; Schema: public; Owner: postgres
+--
+
+CREATE FOREIGN TABLE public.postgres_log_3 (
+)
+INHERITS (public.postgres_log)
+SERVER pglog
+OPTIONS (
+    filename '../pg_log/postgresql-3.csv',
+    format 'csv',
+    header 'false'
+);
+
+
+ALTER FOREIGN TABLE public.postgres_log_3 OWNER TO postgres;
+
+--
+-- TOC entry 233 (class 1259 OID 16478)
+-- Name: failed_authentication_3; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.failed_authentication_3 WITH (security_barrier='true') AS
+ SELECT postgres_log_3.log_time,
+    postgres_log_3.user_name,
+    postgres_log_3.database_name,
+    postgres_log_3.process_id,
+    postgres_log_3.connection_from,
+    postgres_log_3.session_id,
+    postgres_log_3.session_line_num,
+    postgres_log_3.command_tag,
+    postgres_log_3.session_start_time,
+    postgres_log_3.virtual_transaction_id,
+    postgres_log_3.transaction_id,
+    postgres_log_3.error_severity,
+    postgres_log_3.sql_state_code,
+    postgres_log_3.message,
+    postgres_log_3.detail,
+    postgres_log_3.hint,
+    postgres_log_3.internal_query,
+    postgres_log_3.internal_query_pos,
+    postgres_log_3.context,
+    postgres_log_3.query,
+    postgres_log_3.query_pos,
+    postgres_log_3.location,
+    postgres_log_3.application_name,
+    postgres_log_3.backend_type,
+    postgres_log_3.leader_pid,
+    postgres_log_3.query_id
+   FROM public.postgres_log_3
+  WHERE ((postgres_log_3.command_tag = 'authentication'::text) AND (postgres_log_3.error_severity = 'FATAL'::text));
+
+
+ALTER TABLE public.failed_authentication_3 OWNER TO postgres;
+
+--
+-- TOC entry 234 (class 1259 OID 16483)
+-- Name: postgres_log_4; Type: FOREIGN TABLE; Schema: public; Owner: postgres
+--
+
+CREATE FOREIGN TABLE public.postgres_log_4 (
+)
+INHERITS (public.postgres_log)
+SERVER pglog
+OPTIONS (
+    filename '../pg_log/postgresql-4.csv',
+    format 'csv',
+    header 'false'
+);
+
+
+ALTER FOREIGN TABLE public.postgres_log_4 OWNER TO postgres;
+
+--
+-- TOC entry 235 (class 1259 OID 16486)
+-- Name: failed_authentication_4; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.failed_authentication_4 WITH (security_barrier='true') AS
+ SELECT postgres_log_4.log_time,
+    postgres_log_4.user_name,
+    postgres_log_4.database_name,
+    postgres_log_4.process_id,
+    postgres_log_4.connection_from,
+    postgres_log_4.session_id,
+    postgres_log_4.session_line_num,
+    postgres_log_4.command_tag,
+    postgres_log_4.session_start_time,
+    postgres_log_4.virtual_transaction_id,
+    postgres_log_4.transaction_id,
+    postgres_log_4.error_severity,
+    postgres_log_4.sql_state_code,
+    postgres_log_4.message,
+    postgres_log_4.detail,
+    postgres_log_4.hint,
+    postgres_log_4.internal_query,
+    postgres_log_4.internal_query_pos,
+    postgres_log_4.context,
+    postgres_log_4.query,
+    postgres_log_4.query_pos,
+    postgres_log_4.location,
+    postgres_log_4.application_name,
+    postgres_log_4.backend_type,
+    postgres_log_4.leader_pid,
+    postgres_log_4.query_id
+   FROM public.postgres_log_4
+  WHERE ((postgres_log_4.command_tag = 'authentication'::text) AND (postgres_log_4.error_severity = 'FATAL'::text));
+
+
+ALTER TABLE public.failed_authentication_4 OWNER TO postgres;
+
+--
+-- TOC entry 236 (class 1259 OID 16491)
+-- Name: postgres_log_5; Type: FOREIGN TABLE; Schema: public; Owner: postgres
+--
+
+CREATE FOREIGN TABLE public.postgres_log_5 (
+)
+INHERITS (public.postgres_log)
+SERVER pglog
+OPTIONS (
+    filename '../pg_log/postgresql-5.csv',
+    format 'csv',
+    header 'false'
+);
+
+
+ALTER FOREIGN TABLE public.postgres_log_5 OWNER TO postgres;
+
+--
+-- TOC entry 237 (class 1259 OID 16494)
+-- Name: failed_authentication_5; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.failed_authentication_5 WITH (security_barrier='true') AS
+ SELECT postgres_log_5.log_time,
+    postgres_log_5.user_name,
+    postgres_log_5.database_name,
+    postgres_log_5.process_id,
+    postgres_log_5.connection_from,
+    postgres_log_5.session_id,
+    postgres_log_5.session_line_num,
+    postgres_log_5.command_tag,
+    postgres_log_5.session_start_time,
+    postgres_log_5.virtual_transaction_id,
+    postgres_log_5.transaction_id,
+    postgres_log_5.error_severity,
+    postgres_log_5.sql_state_code,
+    postgres_log_5.message,
+    postgres_log_5.detail,
+    postgres_log_5.hint,
+    postgres_log_5.internal_query,
+    postgres_log_5.internal_query_pos,
+    postgres_log_5.context,
+    postgres_log_5.query,
+    postgres_log_5.query_pos,
+    postgres_log_5.location,
+    postgres_log_5.application_name,
+    postgres_log_5.backend_type,
+    postgres_log_5.leader_pid,
+    postgres_log_5.query_id
+   FROM public.postgres_log_5
+  WHERE ((postgres_log_5.command_tag = 'authentication'::text) AND (postgres_log_5.error_severity = 'FATAL'::text));
+
+
+ALTER TABLE public.failed_authentication_5 OWNER TO postgres;
+
+--
+-- TOC entry 238 (class 1259 OID 16499)
+-- Name: postgres_log_6; Type: FOREIGN TABLE; Schema: public; Owner: postgres
+--
+
+CREATE FOREIGN TABLE public.postgres_log_6 (
+)
+INHERITS (public.postgres_log)
+SERVER pglog
+OPTIONS (
+    filename '../pg_log/postgresql-6.csv',
+    format 'csv',
+    header 'false'
+);
+
+
+ALTER FOREIGN TABLE public.postgres_log_6 OWNER TO postgres;
+
+--
+-- TOC entry 239 (class 1259 OID 16502)
+-- Name: failed_authentication_6; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.failed_authentication_6 WITH (security_barrier='true') AS
+ SELECT postgres_log_6.log_time,
+    postgres_log_6.user_name,
+    postgres_log_6.database_name,
+    postgres_log_6.process_id,
+    postgres_log_6.connection_from,
+    postgres_log_6.session_id,
+    postgres_log_6.session_line_num,
+    postgres_log_6.command_tag,
+    postgres_log_6.session_start_time,
+    postgres_log_6.virtual_transaction_id,
+    postgres_log_6.transaction_id,
+    postgres_log_6.error_severity,
+    postgres_log_6.sql_state_code,
+    postgres_log_6.message,
+    postgres_log_6.detail,
+    postgres_log_6.hint,
+    postgres_log_6.internal_query,
+    postgres_log_6.internal_query_pos,
+    postgres_log_6.context,
+    postgres_log_6.query,
+    postgres_log_6.query_pos,
+    postgres_log_6.location,
+    postgres_log_6.application_name,
+    postgres_log_6.backend_type,
+    postgres_log_6.leader_pid,
+    postgres_log_6.query_id
+   FROM public.postgres_log_6
+  WHERE ((postgres_log_6.command_tag = 'authentication'::text) AND (postgres_log_6.error_severity = 'FATAL'::text));
+
+
+ALTER TABLE public.failed_authentication_6 OWNER TO postgres;
+
+--
+-- TOC entry 240 (class 1259 OID 16507)
+-- Name: postgres_log_7; Type: FOREIGN TABLE; Schema: public; Owner: postgres
+--
+
+CREATE FOREIGN TABLE public.postgres_log_7 (
+)
+INHERITS (public.postgres_log)
+SERVER pglog
+OPTIONS (
+    filename '../pg_log/postgresql-7.csv',
+    format 'csv',
+    header 'false'
+);
+
+
+ALTER FOREIGN TABLE public.postgres_log_7 OWNER TO postgres;
+
+--
+-- TOC entry 241 (class 1259 OID 16510)
+-- Name: failed_authentication_7; Type: VIEW; Schema: public; Owner: postgres
+--
+
+CREATE VIEW public.failed_authentication_7 WITH (security_barrier='true') AS
+ SELECT postgres_log_7.log_time,
+    postgres_log_7.user_name,
+    postgres_log_7.database_name,
+    postgres_log_7.process_id,
+    postgres_log_7.connection_from,
+    postgres_log_7.session_id,
+    postgres_log_7.session_line_num,
+    postgres_log_7.command_tag,
+    postgres_log_7.session_start_time,
+    postgres_log_7.virtual_transaction_id,
+    postgres_log_7.transaction_id,
+    postgres_log_7.error_severity,
+    postgres_log_7.sql_state_code,
+    postgres_log_7.message,
+    postgres_log_7.detail,
+    postgres_log_7.hint,
+    postgres_log_7.internal_query,
+    postgres_log_7.internal_query_pos,
+    postgres_log_7.context,
+    postgres_log_7.query,
+    postgres_log_7.query_pos,
+    postgres_log_7.location,
+    postgres_log_7.application_name,
+    postgres_log_7.backend_type,
+    postgres_log_7.leader_pid,
+    postgres_log_7.query_id
+   FROM public.postgres_log_7
+  WHERE ((postgres_log_7.command_tag = 'authentication'::text) AND (postgres_log_7.error_severity = 'FATAL'::text));
+
+
+ALTER TABLE public.failed_authentication_7 OWNER TO postgres;
+
+--
+-- TOC entry 249 (class 1259 OID 24695)
+-- Name: seq5; Type: SEQUENCE; Schema: public; Owner: postgres
+--
+
+CREATE SEQUENCE public.seq5
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+ALTER TABLE public.seq5 OWNER TO postgres;
+
+--
+-- TOC entry 3268 (class 0 OID 16404)
+-- Dependencies: 222
+-- Data for Name: job; Type: TABLE DATA; Schema: cron; Owner: postgres
+--
+
+COPY cron.job (jobid, schedule, command, nodename, nodeport, database, username, active, jobname) FROM stdin;
+\.
+
+
+--
+-- TOC entry 3270 (class 0 OID 16423)
+-- Dependencies: 224
+-- Data for Name: job_run_details; Type: TABLE DATA; Schema: cron; Owner: postgres
+--
+
+COPY cron.job_run_details (jobid, runid, job_pid, database, username, command, status, return_message, start_time, end_time) FROM stdin;
+\.
+
+
+--
+-- TOC entry 3445 (class 0 OID 16445)
+-- Dependencies: 225
+-- Data for Name: postgres_log; Type: TABLE DATA; Schema: public; Owner: postgres
+--
+
+COPY public.postgres_log (log_time, user_name, database_name, process_id, connection_from, session_id, session_line_num, command_tag, session_start_time, virtual_transaction_id, transaction_id, error_severity, sql_state_code, message, detail, hint, internal_query, internal_query_pos, context, query, query_pos, location, application_name, backend_type, leader_pid, query_id) FROM stdin;
+\.
+
+
+--
+-- TOC entry 3520 (class 0 OID 0)
+-- Dependencies: 221
+-- Name: jobid_seq; Type: SEQUENCE SET; Schema: cron; Owner: postgres
+--
+
+SELECT pg_catalog.setval('cron.jobid_seq', 1, false);
+
+
+--
+-- TOC entry 3521 (class 0 OID 0)
+-- Dependencies: 223
+-- Name: runid_seq; Type: SEQUENCE SET; Schema: cron; Owner: postgres
+--
+
+SELECT pg_catalog.setval('cron.runid_seq', 1, false);
+
+
+--
+-- TOC entry 3522 (class 0 OID 0)
+-- Dependencies: 249
+-- Name: seq5; Type: SEQUENCE SET; Schema: public; Owner: postgres
+--
+
+SELECT pg_catalog.setval('public.seq5', 1, false);
+
+
+--
+-- TOC entry 3444 (class 3256 OID 16416)
+-- Name: job cron_job_policy; Type: POLICY; Schema: cron; Owner: postgres
+--
+
+CREATE POLICY cron_job_policy ON cron.job USING (((username = CURRENT_USER) OR (pg_has_role(CURRENT_USER, 'cron_admin'::name, 'MEMBER'::text) AND pg_has_role((username)::name, 'cron_admin'::name, 'MEMBER'::text) AND (NOT (EXISTS ( SELECT 1
+   FROM pg_roles
+  WHERE ((pg_roles.rolname = job.username) AND pg_roles.rolsuper)))))));
+
+
+--
+-- TOC entry 3443 (class 3256 OID 16431)
+-- Name: job_run_details cron_job_run_details_policy; Type: POLICY; Schema: cron; Owner: postgres
+--
+
+CREATE POLICY cron_job_run_details_policy ON cron.job_run_details USING (((username = CURRENT_USER) OR (pg_has_role(CURRENT_USER, 'cron_admin'::name, 'MEMBER'::text) AND pg_has_role((username)::name, 'cron_admin'::name, 'MEMBER'::text) AND (NOT (EXISTS ( SELECT 1
+   FROM pg_roles
+  WHERE ((pg_roles.rolname = job_run_details.username) AND pg_roles.rolsuper)))))));
+
+
+--
+-- TOC entry 3441 (class 0 OID 16404)
+-- Dependencies: 222
+-- Name: job; Type: ROW SECURITY; Schema: cron; Owner: postgres
+--
+
+ALTER TABLE cron.job ENABLE ROW LEVEL SECURITY;
+
+--
+-- TOC entry 3442 (class 0 OID 16423)
+-- Dependencies: 224
+-- Name: job_run_details; Type: ROW SECURITY; Schema: cron; Owner: postgres
+--
+
+ALTER TABLE cron.job_run_details ENABLE ROW LEVEL SECURITY;
+
+--
+-- TOC entry 3453 (class 0 OID 0)
+-- Dependencies: 15
+-- Name: SCHEMA cron; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA cron TO cron_admin;
+
+
+--
+-- TOC entry 3454 (class 0 OID 0)
+-- Dependencies: 16
+-- Name: SCHEMA metric_helpers; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA metric_helpers TO admin;
+GRANT USAGE ON SCHEMA metric_helpers TO robot_zmon;
+
+
+--
+-- TOC entry 3455 (class 0 OID 0)
+-- Dependencies: 12
+-- Name: SCHEMA user_management; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA user_management TO admin;
+
+
+--
+-- TOC entry 3456 (class 0 OID 0)
+-- Dependencies: 14
+-- Name: SCHEMA zmon_utils; Type: ACL; Schema: -; Owner: postgres
+--
+
+GRANT USAGE ON SCHEMA zmon_utils TO robot_zmon;
+
+
+--
+-- TOC entry 3463 (class 0 OID 0)
+-- Dependencies: 296
+-- Name: FUNCTION alter_job(job_id bigint, schedule text, command text, database text, username text, active boolean); Type: ACL; Schema: cron; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION cron.alter_job(job_id bigint, schedule text, command text, database text, username text, active boolean) TO cron_admin;
+
+
+--
+-- TOC entry 3464 (class 0 OID 0)
+-- Dependencies: 275
+-- Name: FUNCTION schedule(schedule text, command text); Type: ACL; Schema: cron; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION cron.schedule(schedule text, command text) FROM PUBLIC;
+GRANT ALL ON FUNCTION cron.schedule(schedule text, command text) TO cron_admin;
+
+
+--
+-- TOC entry 3465 (class 0 OID 0)
+-- Dependencies: 277
+-- Name: FUNCTION schedule(job_name text, schedule text, command text); Type: ACL; Schema: cron; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION cron.schedule(job_name text, schedule text, command text) FROM PUBLIC;
+GRANT ALL ON FUNCTION cron.schedule(job_name text, schedule text, command text) TO cron_admin;
+
+
+--
+-- TOC entry 3466 (class 0 OID 0)
+-- Dependencies: 279
+-- Name: FUNCTION schedule_in_database(p_schedule text, p_database text, p_command text); Type: ACL; Schema: cron; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION cron.schedule_in_database(p_schedule text, p_database text, p_command text) FROM PUBLIC;
+GRANT ALL ON FUNCTION cron.schedule_in_database(p_schedule text, p_database text, p_command text) TO cron_admin;
+
+
+--
+-- TOC entry 3467 (class 0 OID 0)
+-- Dependencies: 272
+-- Name: FUNCTION schedule_in_database(job_name text, schedule text, command text, database text, username text, active boolean); Type: ACL; Schema: cron; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION cron.schedule_in_database(job_name text, schedule text, command text, database text, username text, active boolean) TO cron_admin;
+
+
+--
+-- TOC entry 3468 (class 0 OID 0)
+-- Dependencies: 276
+-- Name: FUNCTION unschedule(job_id bigint); Type: ACL; Schema: cron; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION cron.unschedule(job_id bigint) FROM PUBLIC;
+GRANT ALL ON FUNCTION cron.unschedule(job_id bigint) TO cron_admin;
+
+
+--
+-- TOC entry 3469 (class 0 OID 0)
+-- Dependencies: 278
+-- Name: FUNCTION unschedule(job_name name); Type: ACL; Schema: cron; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION cron.unschedule(job_name name) FROM PUBLIC;
+GRANT ALL ON FUNCTION cron.unschedule(job_name name) TO cron_admin;
+
+
+--
+-- TOC entry 3470 (class 0 OID 0)
+-- Dependencies: 294
+-- Name: FUNCTION get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean); Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) TO admin;
+GRANT ALL ON FUNCTION metric_helpers.get_btree_bloat_approx(OUT i_database name, OUT i_schema_name name, OUT i_table_name name, OUT i_index_name name, OUT i_real_size numeric, OUT i_extra_size numeric, OUT i_extra_ratio double precision, OUT i_fill_factor integer, OUT i_bloat_size double precision, OUT i_bloat_ratio double precision, OUT i_is_na boolean) TO robot_zmon;
+
+
+--
+-- TOC entry 3471 (class 0 OID 0)
+-- Dependencies: 298
+-- Name: FUNCTION get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean); Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) TO admin;
+GRANT ALL ON FUNCTION metric_helpers.get_table_bloat_approx(OUT t_database name, OUT t_schema_name name, OUT t_table_name name, OUT t_real_size numeric, OUT t_extra_size double precision, OUT t_extra_ratio double precision, OUT t_fill_factor integer, OUT t_bloat_size double precision, OUT t_bloat_ratio double precision, OUT t_is_na boolean) TO robot_zmon;
+
+
+--
+-- TOC entry 3472 (class 0 OID 0)
+-- Dependencies: 295
+-- Name: FUNCTION pg_stat_statements(showtext boolean); Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION metric_helpers.pg_stat_statements(showtext boolean) FROM PUBLIC;
+GRANT ALL ON FUNCTION metric_helpers.pg_stat_statements(showtext boolean) TO admin;
+GRANT ALL ON FUNCTION metric_helpers.pg_stat_statements(showtext boolean) TO robot_zmon;
+
+
+--
+-- TOC entry 3473 (class 0 OID 0)
+-- Dependencies: 254
+-- Name: FUNCTION pg_switch_wal(); Type: ACL; Schema: pg_catalog; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION pg_catalog.pg_switch_wal() TO admin;
+
+
+--
+-- TOC entry 3474 (class 0 OID 0)
+-- Dependencies: 290
+-- Name: FUNCTION pg_stat_statements_reset(userid oid, dbid oid, queryid bigint); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.pg_stat_statements_reset(userid oid, dbid oid, queryid bigint) TO admin;
+
+
+--
+-- TOC entry 3475 (class 0 OID 0)
+-- Dependencies: 289
+-- Name: FUNCTION set_user(text); Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION public.set_user(text) TO admin;
+
+
+--
+-- TOC entry 3477 (class 0 OID 0)
+-- Dependencies: 291
+-- Name: FUNCTION create_application_user(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_application_user(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_application_user(username text) TO admin;
+
+
+--
+-- TOC entry 3479 (class 0 OID 0)
+-- Dependencies: 268
+-- Name: FUNCTION create_application_user_or_change_password(username text, password text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_application_user_or_change_password(username text, password text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_application_user_or_change_password(username text, password text) TO admin;
+
+
+--
+-- TOC entry 3481 (class 0 OID 0)
+-- Dependencies: 292
+-- Name: FUNCTION create_role(rolename text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_role(rolename text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_role(rolename text) TO admin;
+
+
+--
+-- TOC entry 3483 (class 0 OID 0)
+-- Dependencies: 255
+-- Name: FUNCTION create_user(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.create_user(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.create_user(username text) TO admin;
+
+
+--
+-- TOC entry 3485 (class 0 OID 0)
+-- Dependencies: 269
+-- Name: FUNCTION drop_role(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.drop_role(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.drop_role(username text) TO admin;
+
+
+--
+-- TOC entry 3487 (class 0 OID 0)
+-- Dependencies: 270
+-- Name: FUNCTION drop_user(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.drop_user(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.drop_user(username text) TO admin;
+
+
+--
+-- TOC entry 3489 (class 0 OID 0)
+-- Dependencies: 271
+-- Name: FUNCTION revoke_admin(username text); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.revoke_admin(username text) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.revoke_admin(username text) TO admin;
+
+
+--
+-- TOC entry 3491 (class 0 OID 0)
+-- Dependencies: 267
+-- Name: FUNCTION terminate_backend(pid integer); Type: ACL; Schema: user_management; Owner: postgres
+--
+
+REVOKE ALL ON FUNCTION user_management.terminate_backend(pid integer) FROM PUBLIC;
+GRANT ALL ON FUNCTION user_management.terminate_backend(pid integer) TO admin;
+
+
+--
+-- TOC entry 3492 (class 0 OID 0)
+-- Dependencies: 297
+-- Name: FUNCTION get_database_cluster_information(); Type: ACL; Schema: zmon_utils; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION zmon_utils.get_database_cluster_information() TO robot_zmon;
+
+
+--
+-- TOC entry 3493 (class 0 OID 0)
+-- Dependencies: 253
+-- Name: FUNCTION get_database_cluster_system_information(); Type: ACL; Schema: zmon_utils; Owner: postgres
+--
+
+GRANT ALL ON FUNCTION zmon_utils.get_database_cluster_system_information() TO robot_zmon;
+
+
+--
+-- TOC entry 3494 (class 0 OID 0)
+-- Dependencies: 222
+-- Name: TABLE job; Type: ACL; Schema: cron; Owner: postgres
+--
+
+REVOKE SELECT ON TABLE cron.job FROM PUBLIC;
+GRANT SELECT ON TABLE cron.job TO cron_admin;
+
+
+--
+-- TOC entry 3495 (class 0 OID 0)
+-- Dependencies: 222 3494
+-- Name: COLUMN job.nodename; Type: ACL; Schema: cron; Owner: postgres
+--
+
+GRANT UPDATE(nodename) ON TABLE cron.job TO cron_admin;
+
+
+--
+-- TOC entry 3496 (class 0 OID 0)
+-- Dependencies: 222 3494
+-- Name: COLUMN job.database; Type: ACL; Schema: cron; Owner: postgres
+--
+
+GRANT UPDATE(database) ON TABLE cron.job TO cron_admin;
+
+
+--
+-- TOC entry 3497 (class 0 OID 0)
+-- Dependencies: 224
+-- Name: TABLE job_run_details; Type: ACL; Schema: cron; Owner: postgres
+--
+
+REVOKE SELECT,DELETE ON TABLE cron.job_run_details FROM PUBLIC;
+GRANT DELETE ON TABLE cron.job_run_details TO PUBLIC;
+GRANT SELECT ON TABLE cron.job_run_details TO cron_admin;
+
+
+--
+-- TOC entry 3498 (class 0 OID 0)
+-- Dependencies: 247
+-- Name: TABLE index_bloat; Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+GRANT SELECT ON TABLE metric_helpers.index_bloat TO admin;
+GRANT SELECT ON TABLE metric_helpers.index_bloat TO robot_zmon;
+
+
+--
+-- TOC entry 3499 (class 0 OID 0)
+-- Dependencies: 248
+-- Name: TABLE pg_stat_statements; Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+GRANT SELECT ON TABLE metric_helpers.pg_stat_statements TO admin;
+GRANT SELECT ON TABLE metric_helpers.pg_stat_statements TO robot_zmon;
+
+
+--
+-- TOC entry 3500 (class 0 OID 0)
+-- Dependencies: 246
+-- Name: TABLE table_bloat; Type: ACL; Schema: metric_helpers; Owner: postgres
+--
+
+GRANT SELECT ON TABLE metric_helpers.table_bloat TO admin;
+GRANT SELECT ON TABLE metric_helpers.table_bloat TO robot_zmon;
+
+
+--
+-- TOC entry 3501 (class 0 OID 0)
+-- Dependencies: 127
+-- Name: TABLE pg_stat_activity; Type: ACL; Schema: pg_catalog; Owner: postgres
+--
+
+GRANT SELECT ON TABLE pg_catalog.pg_stat_activity TO admin;
+
+
+--
+-- TOC entry 3502 (class 0 OID 0)
+-- Dependencies: 225
+-- Name: TABLE postgres_log; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.postgres_log TO admin;
+
+
+--
+-- TOC entry 3503 (class 0 OID 0)
+-- Dependencies: 226
+-- Name: TABLE postgres_log_0; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.postgres_log_0 TO admin;
+
+
+--
+-- TOC entry 3504 (class 0 OID 0)
+-- Dependencies: 227
+-- Name: TABLE failed_authentication_0; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.failed_authentication_0 TO robot_zmon;
+
+
+--
+-- TOC entry 3505 (class 0 OID 0)
+-- Dependencies: 228
+-- Name: TABLE postgres_log_1; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.postgres_log_1 TO admin;
+
+
+--
+-- TOC entry 3506 (class 0 OID 0)
+-- Dependencies: 229
+-- Name: TABLE failed_authentication_1; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.failed_authentication_1 TO robot_zmon;
+
+
+--
+-- TOC entry 3507 (class 0 OID 0)
+-- Dependencies: 230
+-- Name: TABLE postgres_log_2; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.postgres_log_2 TO admin;
+
+
+--
+-- TOC entry 3508 (class 0 OID 0)
+-- Dependencies: 231
+-- Name: TABLE failed_authentication_2; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.failed_authentication_2 TO robot_zmon;
+
+
+--
+-- TOC entry 3509 (class 0 OID 0)
+-- Dependencies: 232
+-- Name: TABLE postgres_log_3; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.postgres_log_3 TO admin;
+
+
+--
+-- TOC entry 3510 (class 0 OID 0)
+-- Dependencies: 233
+-- Name: TABLE failed_authentication_3; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.failed_authentication_3 TO robot_zmon;
+
+
+--
+-- TOC entry 3511 (class 0 OID 0)
+-- Dependencies: 234
+-- Name: TABLE postgres_log_4; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.postgres_log_4 TO admin;
+
+
+--
+-- TOC entry 3512 (class 0 OID 0)
+-- Dependencies: 235
+-- Name: TABLE failed_authentication_4; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.failed_authentication_4 TO robot_zmon;
+
+
+--
+-- TOC entry 3513 (class 0 OID 0)
+-- Dependencies: 236
+-- Name: TABLE postgres_log_5; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.postgres_log_5 TO admin;
+
+
+--
+-- TOC entry 3514 (class 0 OID 0)
+-- Dependencies: 237
+-- Name: TABLE failed_authentication_5; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.failed_authentication_5 TO robot_zmon;
+
+
+--
+-- TOC entry 3515 (class 0 OID 0)
+-- Dependencies: 238
+-- Name: TABLE postgres_log_6; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.postgres_log_6 TO admin;
+
+
+--
+-- TOC entry 3516 (class 0 OID 0)
+-- Dependencies: 239
+-- Name: TABLE failed_authentication_6; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.failed_authentication_6 TO robot_zmon;
+
+
+--
+-- TOC entry 3517 (class 0 OID 0)
+-- Dependencies: 240
+-- Name: TABLE postgres_log_7; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.postgres_log_7 TO admin;
+
+
+--
+-- TOC entry 3518 (class 0 OID 0)
+-- Dependencies: 241
+-- Name: TABLE failed_authentication_7; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.failed_authentication_7 TO robot_zmon;
+
+
+--
+-- TOC entry 3519 (class 0 OID 0)
+-- Dependencies: 220
+-- Name: TABLE pg_auth_mon; Type: ACL; Schema: public; Owner: postgres
+--
+
+GRANT SELECT ON TABLE public.pg_auth_mon TO robot_zmon;
+
+
+-- Completed on 2022-10-30 16:26:52
+
+--
+-- PostgreSQL database dump complete
+--
+
+-- Completed on 2022-10-30 16:26:52
+
+--
+-- PostgreSQL database cluster dump complete
+--
+
