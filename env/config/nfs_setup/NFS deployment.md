@@ -17,9 +17,9 @@ $ sudo chmod 777 /mnt/nfs-solr
 $ sudo vi /etc/exports
 #in the export file, add these lines to grant access to each client
 (/mnt/nfs-solr clientIP(rw,sync,no_subtree_check))
-/mnt/nfsdir 129.69.209.198 (rw,sync,no_subtree_check)
-/mnt/nfsdir 129.69.209.199 (rw,sync,no_subtree_check)
-/mnt/nfsdir 129.69.209.200 (rw,sync,no_subtree_check)
+/mnt/nfsdir *(rw,sync,insecure,no_subtree_check,no_root_squash)
+/mnt/nfsdir *(rw,sync,insecure,no_subtree_check,no_root_squash)
+/mnt/nfsdir *(rw,sync,insecure,no_subtree_check,no_root_squash)
 ```
 
 ![image-20220801212551613](https://markdown-1301334775.cos.eu-frankfurt.myqcloud.com/image-20220801212551613.png)
